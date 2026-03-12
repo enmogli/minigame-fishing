@@ -1,1223 +1,1233 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>海風釣魚</title>
+  <!-- 載入 Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 載入 React -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- 載入 Babel 供瀏覽器即時編譯 JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-gray-900 text-white overflow-hidden m-0 p-0">
+  <div id="root"></div>
 
-// --- 音效引擎 (Web Audio API 即時合成) ---
-const SoundEngine = {
-  ctx: null,
-  reelOsc: null,
-  reelGain: null,
-  bgmTimer: null,
-  bgmPlaying: false,
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
 
-  init() {
-    if (!this.ctx) {
-      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
-  },
+    // --- 音效引擎 (Web Audio API 即時合成) ---
+    const SoundEngine = {
+      ctx: null,
+      reelOsc: null,
+      reelGain: null,
+      bgmTimer: null,
+      bgmPlaying: false,
 
-  playBGM() {
-    if (!this.ctx) return;
-    if (this.bgmPlaying) return;
-    this.bgmPlaying = true;
-    let nextNoteTime = this.ctx.currentTime + 0.1;
-    let step = 0;
-    const chords = [
-      [261.63, 329.63, 392.00, 493.88], 
-      [220.00, 261.63, 329.63, 440.00], 
-      [174.61, 261.63, 329.63, 349.23], 
-      [196.00, 246.94, 293.66, 349.23], 
-    ];
-
-    const schedule = () => {
-      if (!this.bgmPlaying) return;
-      while (nextNoteTime < this.ctx.currentTime + 0.1) {
-        const chordIdx = Math.floor(step / 8) % chords.length;
-        const noteIdx = step % 4; 
-        const freq = chords[chordIdx][noteIdx];
-        
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = freq;
-        
-        osc.connect(gain); gain.connect(this.ctx.destination);
-        gain.gain.setValueAtTime(0, nextNoteTime);
-        gain.gain.linearRampToValueAtTime(0.12, nextNoteTime + 0.1);
-        gain.gain.exponentialRampToValueAtTime(0.01, nextNoteTime + 1.2);
-        
-        osc.start(nextNoteTime);
-        osc.stop(nextNoteTime + 1.5);
-        
-        if (step % 8 === 0) {
-            const bassOsc = this.ctx.createOscillator();
-            const bassGain = this.ctx.createGain();
-            bassOsc.type = 'triangle';
-            bassOsc.frequency.value = chords[chordIdx][0] / 2;
-            bassOsc.connect(bassGain); bassGain.connect(this.ctx.destination);
-            bassGain.gain.setValueAtTime(0, nextNoteTime);
-            bassGain.gain.linearRampToValueAtTime(0.2, nextNoteTime + 0.5);
-            bassGain.gain.exponentialRampToValueAtTime(0.01, nextNoteTime + 2.5);
-            bassOsc.start(nextNoteTime);
-            bassOsc.stop(nextNoteTime + 3.0);
+      init() {
+        if (!this.ctx) {
+          this.ctx = new (window.AudioContext || window.webkitAudioContext)();
         }
-        nextNoteTime += 0.35; 
-        step++;
-      }
-      this.bgmTimer = setTimeout(schedule, 100);
-    };
-    schedule();
-  },
-
-  playEndingBGM() {
-    if (!this.ctx) return;
-    this.stopBGM();
-    this.bgmPlaying = true;
-    let nextNoteTime = this.ctx.currentTime + 0.1;
-    let step = 0;
-    const MAX_STEPS = 24; 
-    
-    const chords = [
-      [174.61, 261.63, 329.63, 440.00], 
-      [130.81, 261.63, 329.63, 392.00], 
-      [146.83, 293.66, 349.23, 440.00], 
-      [130.81, 261.63, 329.63, 392.00], 
-    ];
-
-    const schedule = () => {
-      if (!this.bgmPlaying || step >= MAX_STEPS) {
-        this.bgmPlaying = false;
-        return;
-      }
-      while (nextNoteTime < this.ctx.currentTime + 0.1 && step < MAX_STEPS) {
-        const chordIdx = Math.floor(step / 6) % chords.length;
-        const noteIdx = step % 4; 
-        const freq = chords[chordIdx][noteIdx];
-        
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = freq;
-        osc.connect(gain); gain.connect(this.ctx.destination);
-        
-        gain.gain.setValueAtTime(0, nextNoteTime);
-        gain.gain.linearRampToValueAtTime(0.15, nextNoteTime + 0.2);
-        gain.gain.exponentialRampToValueAtTime(0.01, nextNoteTime + 2.5);
-        osc.start(nextNoteTime); osc.stop(nextNoteTime + 3.0);
-        
-        if (step % 6 === 0) {
-            const bassOsc = this.ctx.createOscillator();
-            const bassGain = this.ctx.createGain();
-            bassOsc.type = 'sine';
-            bassOsc.frequency.value = chords[chordIdx][0];
-            bassOsc.connect(bassGain); bassGain.connect(this.ctx.destination);
-            bassGain.gain.setValueAtTime(0, nextNoteTime);
-            bassGain.gain.linearRampToValueAtTime(0.3, nextNoteTime + 0.5);
-            bassGain.gain.exponentialRampToValueAtTime(0.01, nextNoteTime + 5.0);
-            bassOsc.start(nextNoteTime);
-            bassOsc.stop(nextNoteTime + 5.5);
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
         }
-        nextNoteTime += 0.45; 
-        step++;
-      }
-      this.bgmTimer = setTimeout(schedule, 100);
-    };
-    schedule();
-  },
+      },
 
-  stopBGM() {
-    this.bgmPlaying = false;
-    clearTimeout(this.bgmTimer);
-  },
+      playBGM() {
+        if (!this.ctx) return;
+        if (this.bgmPlaying) return;
+        this.bgmPlaying = true;
+        let nextNoteTime = this.ctx.currentTime + 0.1;
+        let step = 0;
+        const chords = [
+          [261.63, 329.63, 392.00, 493.88], 
+          [220.00, 261.63, 329.63, 440.00], 
+          [174.61, 261.63, 329.63, 349.23], 
+          [196.00, 246.94, 293.66, 349.23], 
+        ];
 
-  playFail() {
-    if (!this.ctx) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.connect(gain); gain.connect(this.ctx.destination);
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(250, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.6);
-    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.6);
-    osc.start(); osc.stop(this.ctx.currentTime + 0.6);
-  },
-
-  playSit() {
-    if (!this.ctx) return;
-    const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
-    osc.connect(gain); gain.connect(this.ctx.destination);
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(300, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(80, this.ctx.currentTime + 0.3);
-    gain.gain.setValueAtTime(0.15, this.ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
-    osc.start(); osc.stop(this.ctx.currentTime + 0.3);
-  },
-
-  playStand() {
-    if (!this.ctx) return;
-    const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
-    osc.connect(gain); gain.connect(this.ctx.destination);
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(80, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(300, this.ctx.currentTime + 0.3);
-    gain.gain.setValueAtTime(0.15, this.ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
-    osc.start(); osc.stop(this.ctx.currentTime + 0.3);
-  },
-
-  playCast() { if(!this.ctx) return; const o=this.ctx.createOscillator(), g=this.ctx.createGain(); o.connect(g); g.connect(this.ctx.destination); o.type='sine'; o.frequency.setValueAtTime(600,this.ctx.currentTime); o.frequency.exponentialRampToValueAtTime(100,this.ctx.currentTime+0.4); g.gain.setValueAtTime(0,this.ctx.currentTime); g.gain.linearRampToValueAtTime(0.5,this.ctx.currentTime+0.1); g.gain.exponentialRampToValueAtTime(0.01,this.ctx.currentTime+0.5); o.start(); o.stop(this.ctx.currentTime+0.5); },
-  playNibble() { if(!this.ctx) return; const o=this.ctx.createOscillator(), g=this.ctx.createGain(); o.connect(g); g.connect(this.ctx.destination); o.type='sine'; o.frequency.setValueAtTime(400,this.ctx.currentTime); o.frequency.exponentialRampToValueAtTime(150,this.ctx.currentTime+0.1); g.gain.setValueAtTime(0.4,this.ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.01,this.ctx.currentTime+0.1); o.start(); o.stop(this.ctx.currentTime+0.1); },
-  playBite() { if(!this.ctx) return; const o=this.ctx.createOscillator(), g=this.ctx.createGain(); o.connect(g); g.connect(this.ctx.destination); o.type='triangle'; o.frequency.setValueAtTime(1200,this.ctx.currentTime); o.frequency.exponentialRampToValueAtTime(600,this.ctx.currentTime+0.3); g.gain.setValueAtTime(0.8,this.ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.01,this.ctx.currentTime+0.3); o.start(); o.stop(this.ctx.currentTime+0.3); },
-  playHit() { if(!this.ctx) return; const o=this.ctx.createOscillator(), g=this.ctx.createGain(); o.connect(g); g.connect(this.ctx.destination); o.type='square'; o.frequency.setValueAtTime(300,this.ctx.currentTime); o.frequency.exponentialRampToValueAtTime(1000,this.ctx.currentTime+0.2); g.gain.setValueAtTime(0.6,this.ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.01,this.ctx.currentTime+0.4); o.start(); o.stop(this.ctx.currentTime+0.4); },
-  startReeling() { if(!this.ctx||this.reelOsc) return; this.reelOsc=this.ctx.createOscillator(); this.reelGain=this.ctx.createGain(); const f=this.ctx.createBiquadFilter(); this.reelOsc.type='square'; this.reelOsc.frequency.value=25; f.type='bandpass'; f.frequency.value=1200; this.reelGain.gain.value=0.5; this.reelOsc.connect(f); f.connect(this.reelGain); this.reelGain.connect(this.ctx.destination); this.reelOsc.start(); },
-  stopReeling() { if(this.reelOsc){ this.reelOsc.stop(); this.reelOsc.disconnect(); this.reelOsc=null; } },
-  playVictory() { if(!this.ctx) return; const n=[523.25,659.25,783.99,1046.50]; n.forEach((f,i)=>{ const o=this.ctx.createOscillator(),g=this.ctx.createGain(); o.connect(g); g.connect(this.ctx.destination); o.type='square'; o.frequency.value=f; const st=this.ctx.currentTime+(i*0.08); g.gain.setValueAtTime(0,st); g.gain.linearRampToValueAtTime(0.2,st+0.02); g.gain.exponentialRampToValueAtTime(0.01,st+0.4); o.start(st); o.stop(st+0.4); }); },
-  playTally() { if(!this.ctx) return; const o=this.ctx.createOscillator(),g=this.ctx.createGain(); o.connect(g); g.connect(this.ctx.destination); o.type='sine'; o.frequency.setValueAtTime(1000,this.ctx.currentTime); o.frequency.exponentialRampToValueAtTime(1500,this.ctx.currentTime+0.05); g.gain.setValueAtTime(0.2,this.ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.01,this.ctx.currentTime+0.05); o.start(); o.stop(this.ctx.currentTime+0.05); },
-  playGrandTotal() { if(!this.ctx) return; const n=[261.63,329.63,392.00,523.25]; n.forEach((f)=>{ const o=this.ctx.createOscillator(),g=this.ctx.createGain(); o.connect(g); g.connect(this.ctx.destination); o.type='triangle'; o.frequency.value=f; g.gain.setValueAtTime(0,this.ctx.currentTime); g.gain.linearRampToValueAtTime(0.3,this.ctx.currentTime+0.1); g.gain.exponentialRampToValueAtTime(0.01,this.ctx.currentTime+1.5); o.start(); o.stop(this.ctx.currentTime+1.5); }); }
-};
-
-// --- 遊戲資料 (區分日夜出現魚種) ---
-const FISH_DATABASE = [
-  // 廢棄物
-  { name: "破舊的靴子", icon: "🥾", rarity: "trash", color: "text-gray-400", hex: "#9ca3af", minLen: 20, maxLen: 30, minPrice: 0, maxPrice: 1, chance: 5, baseDiff: 1, time: "both" },
-  { name: "纏人的海草", icon: "🌿", rarity: "trash", color: "text-green-600", hex: "#16a34a", minLen: 10, maxLen: 50, minPrice: 0, maxPrice: 2, chance: 5, baseDiff: 1, time: "both" },
-  { name: "泡水的背包", icon: "🎒", rarity: "trash", color: "text-amber-700", hex: "#b45309", minLen: 30, maxLen: 50, minPrice: 0, maxPrice: 5, chance: 5, baseDiff: 2, time: "both" },
-  
-  // 日行性
-  { name: "海瓜子", icon: "🐚", rarity: "common", color: "text-white", hex: "#ffffff", minLen: 2, maxLen: 5, minPrice: 5, maxPrice: 10, chance: 15, baseDiff: 1, time: "day" },
-  { name: "雀鯛", icon: "🐟", rarity: "common", color: "text-white", hex: "#ffffff", minLen: 5, maxLen: 15, minPrice: 10, maxPrice: 20, chance: 15, baseDiff: 2, time: "day" },
-  { name: "沙丁魚", icon: "🐟", rarity: "common", color: "text-white", hex: "#ffffff", minLen: 10, maxLen: 20, minPrice: 15, maxPrice: 30, chance: 10, baseDiff: 2, time: "day" },
-  { name: "竹筴魚", icon: "🐟", rarity: "uncommon", color: "text-green-400", hex: "#4ade80", minLen: 20, maxLen: 35, minPrice: 40, maxPrice: 80, chance: 10, baseDiff: 3, time: "both" },
-  { name: "烏魚", icon: "🐟", rarity: "uncommon", color: "text-green-400", hex: "#4ade80", minLen: 30, maxLen: 50, minPrice: 60, maxPrice: 120, chance: 8, baseDiff: 4, time: "day" },
-  { name: "黑鯛", icon: "🐟", rarity: "rare", color: "text-blue-400", hex: "#60a5fa", minLen: 30, maxLen: 50, minPrice: 150, maxPrice: 300, chance: 5, baseDiff: 5, time: "day" },
-  
-  // 夜行性
-  { name: "魷魚", icon: "🦑", rarity: "common", color: "text-white", hex: "#ffffff", minLen: 15, maxLen: 40, minPrice: 20, maxPrice: 50, chance: 20, baseDiff: 2, time: "night" },
-  { name: "白帶魚", icon: "🐟", rarity: "uncommon", color: "text-green-400", hex: "#4ade80", minLen: 60, maxLen: 150, minPrice: 70, maxPrice: 140, chance: 12, baseDiff: 4, time: "night" },
-  { name: "星鰻", icon: "🐟", rarity: "rare", color: "text-blue-400", hex: "#60a5fa", minLen: 40, maxLen: 80, minPrice: 180, maxPrice: 350, chance: 6, baseDiff: 6, time: "night" },
-
-  // 高階雙棲
-  { name: "紅槽", icon: "🐟", rarity: "rare", color: "text-blue-400", hex: "#60a5fa", minLen: 35, maxLen: 60, minPrice: 180, maxPrice: 350, chance: 5, baseDiff: 5, time: "day" },
-  { name: "鮭魚", icon: "🐟", rarity: "epic", color: "text-purple-400", hex: "#c084fc", minLen: 50, maxLen: 100, minPrice: 800, maxPrice: 1500, chance: 3, baseDiff: 8, time: "day" },
-  { name: "石斑", icon: "🐟", rarity: "epic", color: "text-purple-400", hex: "#c084fc", minLen: 60, maxLen: 120, minPrice: 1000, maxPrice: 2000, chance: 3, baseDiff: 8, time: "both" },
-  { name: "燈籠魚", icon: "🐟", rarity: "epic", color: "text-purple-400", hex: "#c084fc", minLen: 20, maxLen: 45, minPrice: 900, maxPrice: 1800, chance: 3, baseDiff: 8, time: "night" },
-  { name: "夜光章魚", icon: "🐙", rarity: "epic", color: "text-purple-400", hex: "#c084fc", minLen: 30, maxLen: 70, minPrice: 1200, maxPrice: 2200, chance: 2, baseDiff: 9, time: "night" },
-
-  // 傳說
-  { name: "傳說黃金石斑", icon: "👑", rarity: "legendary", color: "text-yellow-400", hex: "#facc15", minLen: 100, maxLen: 200, minPrice: 5000, maxPrice: 10000, chance: 1, baseDiff: 10, time: "day" },
-  { name: "幽靈魟魚", icon: "👑", rarity: "legendary", color: "text-yellow-400", hex: "#facc15", minLen: 150, maxLen: 300, minPrice: 6000, maxPrice: 12000, chance: 1, baseDiff: 10, time: "night" },
-];
-
-const generateFish = (gameTime) => {
-  const isNight = gameTime < 360 || gameTime > 1080; 
-  const availableFish = FISH_DATABASE.filter(f => f.time === "both" || (isNight ? f.time === "night" : f.time === "day"));
-  
-  const totalChance = availableFish.reduce((acc, f) => acc + f.chance, 0);
-  let rand = Math.random() * totalChance;
-  let selectedFish = availableFish[0];
-  
-  for (let fish of availableFish) {
-    if (rand <= fish.chance) { selectedFish = fish; break; }
-    rand -= fish.chance;
-  }
-  
-  const length = Math.floor(Math.random() * (selectedFish.maxLen - selectedFish.minLen + 1)) + selectedFish.minLen;
-  const price = Math.floor(Math.random() * (selectedFish.maxPrice - selectedFish.minPrice + 1)) + selectedFish.minPrice;
-  const sizeRatio = (length - selectedFish.minLen) / (selectedFish.maxLen - selectedFish.minLen || 1);
-  return { ...selectedFish, length, price, id: Date.now() + Math.random(), difficulty: selectedFish.baseDiff + (sizeRatio * 2) };
-};
-
-const evaluateRank = (earnings) => {
-  if (earnings >= 8000) return { rank: 'S', color: 'text-yellow-400', text: '傳奇海神！釣魚界的活傳說！' };
-  if (earnings >= 3000) return { rank: 'A', color: 'text-purple-400', text: '釣魚大師！收穫驚人！' };
-  if (earnings >= 1000) return { rank: 'B', color: 'text-blue-400', text: '釣魚高手！滿載而歸！' };
-  if (earnings >= 100) return { rank: 'C', color: 'text-green-400', text: '普普通通，還算能糊口。' };
-  return { rank: 'D', color: 'text-gray-400', text: '今天運氣真差，下次再努力吧...' };
-};
-
-// --- 元件: 結算跑分畫面 ---
-const SummaryPanel = ({ inventory, totalEarned, onRestart, onGoHome }) => {
-  const [displayIndex, setDisplayIndex] = useState(-1); 
-  const [runningTotal, setRunningTotal] = useState(0);
-  const [isFinished, setIsFinished] = useState(false);
-  const endRef = useRef(null);
-
-  useEffect(() => {
-    const startDelay = setTimeout(() => setDisplayIndex(0), 600);
-    return () => clearTimeout(startDelay);
-  }, []);
-
-  useEffect(() => {
-    if (displayIndex >= 0 && displayIndex < inventory.length) {
-      const timer = setTimeout(() => {
-        SoundEngine.playTally();
-        setRunningTotal(prev => prev + inventory[displayIndex].price);
-        setDisplayIndex(prev => prev + 1);
-        if (endRef.current) endRef.current.scrollIntoView({ behavior: 'smooth' });
-      }, 250); 
-      return () => clearTimeout(timer);
-    } else if (displayIndex === inventory.length && !isFinished) {
-      setIsFinished(true);
-      setTimeout(() => { SoundEngine.playGrandTotal(); }, 400);
-    }
-  }, [displayIndex, inventory, isFinished]);
-
-  return (
-    <div className="absolute inset-0 bg-slate-900 bg-opacity-95 flex items-center justify-center p-4 z-50 backdrop-blur-md select-none anim-fade-in">
-      <div className="bg-slate-800 border-4 border-amber-600 rounded-3xl flex flex-col max-w-md w-full h-[85vh] shadow-[0_0_50px_rgba(217,119,6,0.2)]">
-        <div className="p-6 border-b-2 border-slate-700 flex-none text-center">
-          <h2 className="text-3xl font-black text-white mb-2 tracking-widest">今日收穫總結</h2>
-          <p className="text-gray-400 text-sm">成果發表時間！</p>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 relative custom-scrollbar">
-          {inventory.length === 0 && isFinished && (
-             <div className="flex flex-col items-center justify-center h-full text-gray-500 anim-fade-in">
-               <span className="text-6xl mb-4 opacity-50">🎣</span>
-               <span className="text-xl font-bold">空手而歸...</span>
-             </div>
-          )}
-          {inventory.slice(0, displayIndex).map((fish, idx) => (
-            <div key={`${fish.id}-${idx}`} className="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-700 anim-slide-in-right">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl drop-shadow-md">{fish.icon}</span>
-                <span className={`font-bold text-lg ${fish.color}`}>{fish.name}</span>
-              </div>
-              <span className="text-yellow-400 font-mono font-bold text-lg">+ ${fish.price}</span>
-            </div>
-          ))}
-          <div ref={endRef} className="h-2"></div>
-        </div>
-
-        <div className="p-6 bg-slate-900 rounded-b-3xl border-t-4 border-slate-700 flex-none">
-          <div className="flex justify-between items-end mb-4">
-            <span className="text-gray-400 text-lg">總計金額</span>
-            <span className={`font-black text-4xl transition-all duration-300 ${isFinished ? 'text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)] scale-110 origin-right' : 'text-white'}`}>
-              $ {runningTotal.toLocaleString()}
-            </span>
-          </div>
-          {isFinished && (
-            <div className="mb-6 pt-4 border-t-2 border-dashed border-slate-700 flex flex-col items-center anim-fade-in-up">
-              <span className="text-gray-400 text-sm mb-1">釣魚大師評價</span>
-              <div className={`text-5xl font-black ${evaluateRank(runningTotal).color} drop-shadow-lg mb-1`}>{evaluateRank(runningTotal).rank}</div>
-              <span className={`font-bold text-sm ${evaluateRank(runningTotal).color} text-center`}>{evaluateRank(runningTotal).text}</span>
-            </div>
-          )}
-          
-          <div className="flex gap-3">
-            <button disabled={!isFinished} onClick={onRestart} className={`flex-1 py-4 font-bold text-xl rounded-xl transition-all ${isFinished ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_6px_0_rgb(30,58,138)] active:shadow-[0_0px_0_rgb(30,58,138)] active:translate-y-1' : 'bg-slate-700 text-slate-500 cursor-not-allowed'}`}>
-              {isFinished ? '再玩一次！' : '結算中...'}
-            </button>
-            <button disabled={!isFinished} onClick={onGoHome} className={`px-4 py-4 font-bold text-lg rounded-xl transition-all ${isFinished ? 'bg-orange-600 hover:bg-orange-500 text-white shadow-[0_6px_0_rgb(153,56,21)] active:shadow-[0_0px_0_rgb(153,56,21)] active:translate-y-1' : 'bg-slate-700 text-slate-500 cursor-not-allowed'}`}>
-              回家囉
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// --- 元件: 結局動畫畫面 (夕陽光普照地面、透視路面捲動、停頓全身 Iris Out) ---
-const EndingScreen = ({ totalEarned }) => {
-  const isHappy = totalEarned > 0; 
-
-  useEffect(() => {
-    SoundEngine.init();
-    SoundEngine.playEndingBGM();
-    return () => SoundEngine.stopBGM();
-  }, []);
-
-  return (
-    <div className="absolute inset-0 bg-black overflow-hidden select-none z-50 flex items-center justify-center">
-      
-      <svg viewBox="0 0 800 500" preserveAspectRatio="xMidYMax slice" className="w-full h-full absolute inset-0 object-cover pointer-events-none">
-        <defs>
-          <linearGradient id="sunsetGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#7c2d12" />
-            <stop offset="60%" stopColor="#ea580c" />
-            <stop offset="100%" stopColor="#fcd34d" />
-          </linearGradient>
-
-          {/* 地面夕陽光輝漸層 */}
-          <linearGradient id="groundSunGrad" x1="0" y1="0" x2="0" y2="1">
-             <stop offset="0%" stopColor="#ea580c" />
-             <stop offset="40%" stopColor="#9a3412" />
-             <stop offset="100%" stopColor="#2c0c04" />
-          </linearGradient>
-
-          {/* 鄉間小路光輝漸層 */}
-          <linearGradient id="pathSunGrad" x1="0" y1="0" x2="0" y2="1">
-             <stop offset="0%" stopColor="#f59e0b" />
-             <stop offset="50%" stopColor="#b45309" />
-             <stop offset="100%" stopColor="#431407" />
-          </linearGradient>
-          
-          {/* 限制路面橫線捲動的遮罩區塊 */}
-          <clipPath id="roadClip">
-            <polygon points="390,380 410,380 650,500 150,500" />
-          </clipPath>
-
-          {/* 鏡頭縮圈遮罩 (精準對位在走到一半的漁夫中心: X=400, Y=430) 
-              確保停頓時的半徑為 160，足以包覆漁夫全身與釣竿 */}
-          <clipPath id="irisMask">
-            <circle cx="400" cy="430" r="1200">
-              <animate attributeName="r" values="1200; 160; 160; 0" keyTimes="0; 0.4; 0.8; 1" dur="4s" begin="3.5s" fill="freeze" />
-            </circle>
-          </clipPath>
-        </defs>
-        
-        {/* 全畫面套用 Iris Out 遮罩 */}
-        <g clipPath="url(#irisMask)">
-          {/* 夕陽天空 */}
-          <rect width="1000" height="500" fill="url(#sunsetGrad)" />
-          
-          {/* 太陽：圖層置於山脈後方，精準被右側斜坡遮擋，只露出外角餘暉 */}
-          <circle cx="465" cy="325" r="40" fill="#fef08a" opacity="0.9" />
-          
-          {/* 遠景山脈 (些微溫暖的反光) */}
-          <path d="M 0 380 L 120 220 L 260 280 L 400 320 L 540 260 L 720 180 L 880 290 L 1000 230 L 1000 380 Z" fill="#4a1504" opacity="1" />
-          
-          {/* 地面 (夕陽光芒普照的漸層) */}
-          <rect y="380" width="1000" height="120" fill="url(#groundSunGrad)" />
-          
-          {/* 鄉間小路 (透視，消失於 400,380，帶有夕陽反光) */}
-          <polygon points="390,380 410,380 650,500 150,500" fill="url(#pathSunGrad)" />
-
-          {/* 3D 捲動特效：路面橫紋向觀眾飛來，3.5 秒精準停止 */}
-          <g clipPath="url(#roadClip)">
-             <g className="anim-road-line-1">
-               <line x1="300" y1="380" x2="500" y2="380" stroke="#431407" />
-             </g>
-             <g className="anim-road-line-2">
-               <line x1="300" y1="380" x2="500" y2="380" stroke="#431407" />
-             </g>
-             <g className="anim-road-line-3">
-               <line x1="300" y1="380" x2="500" y2="380" stroke="#431407" />
-             </g>
-          </g>
-
-          {/* 草叢剪影 (保持溫暖的暗色系) */}
-          <g fill="#2c0c04">
-            <polygon points="360,390 350,390 370,390" />
-            <polygon points="320,410 300,410 330,410" />
-            <polygon points="250,440 220,440 270,440" />
-            <polygon points="180,480 140,480 210,480" />
-            <polygon points="440,390 450,390 430,390" />
-            <polygon points="480,410 500,410 470,410" />
-            <polygon points="550,440 580,440 530,440" />
-            <polygon points="620,480 660,480 590,480" />
-          </g>
-
-          {/* 漁夫背影動畫 (走到畫面一半的 X=400, Y=430 停止，不縮小) */}
-          <g className="anim-walk-away">
+        const schedule = () => {
+          if (!this.bgmPlaying) return;
+          while (nextNoteTime < this.ctx.currentTime + 0.1) {
+            const chordIdx = Math.floor(step / 8) % chords.length;
+            const noteIdx = step % 4; 
+            const freq = chords[chordIdx][noteIdx];
             
-            {/* 動態心情音符 */}
-            {isHappy && (
-              <g>
-                <text x="15" y="-75" fill="#fcd34d" fontSize="24" fontWeight="bold" className="anim-float-note-1">♪</text>
-                <text x="-5" y="-85" fill="#fcd34d" fontSize="28" fontWeight="bold" className="anim-float-note-2">♫</text>
-              </g>
-            )}
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            
+            osc.connect(gain); gain.connect(this.ctx.destination);
+            gain.gain.setValueAtTime(0, nextNoteTime);
+            gain.gain.linearRampToValueAtTime(0.12, nextNoteTime + 0.1);
+            gain.gain.exponentialRampToValueAtTime(0.01, nextNoteTime + 1.2);
+            
+            osc.start(nextNoteTime);
+            osc.stop(nextNoteTime + 1.5);
+            
+            if (step % 8 === 0) {
+                const bassOsc = this.ctx.createOscillator();
+                const bassGain = this.ctx.createGain();
+                bassOsc.type = 'triangle';
+                bassOsc.frequency.value = chords[chordIdx][0] / 2;
+                bassOsc.connect(bassGain); bassGain.connect(this.ctx.destination);
+                bassGain.gain.setValueAtTime(0, nextNoteTime);
+                bassGain.gain.linearRampToValueAtTime(0.2, nextNoteTime + 0.5);
+                bassGain.gain.exponentialRampToValueAtTime(0.01, nextNoteTime + 2.5);
+                bassOsc.start(nextNoteTime);
+                bassOsc.stop(nextNoteTime + 3.0);
+            }
+            nextNoteTime += 0.35; 
+            step++;
+          }
+          this.bgmTimer = setTimeout(schedule, 100);
+        };
+        schedule();
+      },
 
-            <g className="anim-bob">
-              <ellipse cx="0" cy="0" rx="20" ry="3" fill="black" opacity="0.5" />
+      playEndingBGM() {
+        if (!this.ctx) return;
+        this.stopBGM();
+        this.bgmPlaying = true;
+        let nextNoteTime = this.ctx.currentTime + 0.1;
+        let step = 0;
+        const MAX_STEPS = 24; 
+        
+        const chords = [
+          [174.61, 261.63, 329.63, 440.00], 
+          [130.81, 261.63, 329.63, 392.00], 
+          [146.83, 293.66, 349.23, 440.00], 
+          [130.81, 261.63, 329.63, 392.00], 
+        ];
+
+        const schedule = () => {
+          if (!this.bgmPlaying || step >= MAX_STEPS) {
+            this.bgmPlaying = false;
+            return;
+          }
+          while (nextNoteTime < this.ctx.currentTime + 0.1 && step < MAX_STEPS) {
+            const chordIdx = Math.floor(step / 6) % chords.length;
+            const noteIdx = step % 4; 
+            const freq = chords[chordIdx][noteIdx];
+            
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            osc.connect(gain); gain.connect(this.ctx.destination);
+            
+            gain.gain.setValueAtTime(0, nextNoteTime);
+            gain.gain.linearRampToValueAtTime(0.15, nextNoteTime + 0.2);
+            gain.gain.exponentialRampToValueAtTime(0.01, nextNoteTime + 2.5);
+            osc.start(nextNoteTime); osc.stop(nextNoteTime + 3.0);
+            
+            if (step % 6 === 0) {
+                const bassOsc = this.ctx.createOscillator();
+                const bassGain = this.ctx.createGain();
+                bassOsc.type = 'sine';
+                bassOsc.frequency.value = chords[chordIdx][0];
+                bassOsc.connect(bassGain); bassGain.connect(this.ctx.destination);
+                bassGain.gain.setValueAtTime(0, nextNoteTime);
+                bassGain.gain.linearRampToValueAtTime(0.3, nextNoteTime + 0.5);
+                bassGain.gain.exponentialRampToValueAtTime(0.01, nextNoteTime + 5.0);
+                bassOsc.start(nextNoteTime);
+                bassOsc.stop(nextNoteTime + 5.5);
+            }
+            nextNoteTime += 0.45; 
+            step++;
+          }
+          this.bgmTimer = setTimeout(schedule, 100);
+        };
+        schedule();
+      },
+
+      stopBGM() {
+        this.bgmPlaying = false;
+        clearTimeout(this.bgmTimer);
+      },
+
+      playFail() {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain); gain.connect(this.ctx.destination);
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(250, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.6);
+        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.6);
+        osc.start(); osc.stop(this.ctx.currentTime + 0.6);
+      },
+
+      playSit() {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
+        osc.connect(gain); gain.connect(this.ctx.destination);
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(80, this.ctx.currentTime + 0.3);
+        gain.gain.setValueAtTime(0.15, this.ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+        osc.start(); osc.stop(this.ctx.currentTime + 0.3);
+      },
+
+      playStand() {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
+        osc.connect(gain); gain.connect(this.ctx.destination);
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(80, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(300, this.ctx.currentTime + 0.3);
+        gain.gain.setValueAtTime(0.15, this.ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+        osc.start(); osc.stop(this.ctx.currentTime + 0.3);
+      },
+
+      playCast() { if(!this.ctx) return; const o=this.ctx.createOscillator(), g=this.ctx.createGain(); o.connect(g); g.connect(this.ctx.destination); o.type='sine'; o.frequency.setValueAtTime(600,this.ctx.currentTime); o.frequency.exponentialRampToValueAtTime(100,this.ctx.currentTime+0.4); g.gain.setValueAtTime(0,this.ctx.currentTime); g.gain.linearRampToValueAtTime(0.5,this.ctx.currentTime+0.1); g.gain.exponentialRampToValueAtTime(0.01,this.ctx.currentTime+0.5); o.start(); o.stop(this.ctx.currentTime+0.5); },
+      playNibble() { if(!this.ctx) return; const o=this.ctx.createOscillator(), g=this.ctx.createGain(); o.connect(g); g.connect(this.ctx.destination); o.type='sine'; o.frequency.setValueAtTime(400,this.ctx.currentTime); o.frequency.exponentialRampToValueAtTime(150,this.ctx.currentTime+0.1); g.gain.setValueAtTime(0.4,this.ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.01,this.ctx.currentTime+0.1); o.start(); o.stop(this.ctx.currentTime+0.1); },
+      playBite() { if(!this.ctx) return; const o=this.ctx.createOscillator(), g=this.ctx.createGain(); o.connect(g); g.connect(this.ctx.destination); o.type='triangle'; o.frequency.setValueAtTime(1200,this.ctx.currentTime); o.frequency.exponentialRampToValueAtTime(600,this.ctx.currentTime+0.3); g.gain.setValueAtTime(0.8,this.ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.01,this.ctx.currentTime+0.3); o.start(); o.stop(this.ctx.currentTime+0.3); },
+      playHit() { if(!this.ctx) return; const o=this.ctx.createOscillator(), g=this.ctx.createGain(); o.connect(g); g.connect(this.ctx.destination); o.type='square'; o.frequency.setValueAtTime(300,this.ctx.currentTime); o.frequency.exponentialRampToValueAtTime(1000,this.ctx.currentTime+0.2); g.gain.setValueAtTime(0.6,this.ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.01,this.ctx.currentTime+0.4); o.start(); o.stop(this.ctx.currentTime+0.4); },
+      startReeling() { if(!this.ctx||this.reelOsc) return; this.reelOsc=this.ctx.createOscillator(); this.reelGain=this.ctx.createGain(); const f=this.ctx.createBiquadFilter(); this.reelOsc.type='square'; this.reelOsc.frequency.value=25; f.type='bandpass'; f.frequency.value=1200; this.reelGain.gain.value=0.5; this.reelOsc.connect(f); f.connect(this.reelGain); this.reelGain.connect(this.ctx.destination); this.reelOsc.start(); },
+      stopReeling() { if(this.reelOsc){ this.reelOsc.stop(); this.reelOsc.disconnect(); this.reelOsc=null; } },
+      playVictory() { if(!this.ctx) return; const n=[523.25,659.25,783.99,1046.50]; n.forEach((f,i)=>{ const o=this.ctx.createOscillator(),g=this.ctx.createGain(); o.connect(g); g.connect(this.ctx.destination); o.type='square'; o.frequency.value=f; const st=this.ctx.currentTime+(i*0.08); g.gain.setValueAtTime(0,st); g.gain.linearRampToValueAtTime(0.2,st+0.02); g.gain.exponentialRampToValueAtTime(0.01,st+0.4); o.start(st); o.stop(st+0.4); }); },
+      playTally() { if(!this.ctx) return; const o=this.ctx.createOscillator(),g=this.ctx.createGain(); o.connect(g); g.connect(this.ctx.destination); o.type='sine'; o.frequency.setValueAtTime(1000,this.ctx.currentTime); o.frequency.exponentialRampToValueAtTime(1500,this.ctx.currentTime+0.05); g.gain.setValueAtTime(0.2,this.ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.01,this.ctx.currentTime+0.05); o.start(); o.stop(this.ctx.currentTime+0.05); },
+      playGrandTotal() { if(!this.ctx) return; const n=[261.63,329.63,392.00,523.25]; n.forEach((f)=>{ const o=this.ctx.createOscillator(),g=this.ctx.createGain(); o.connect(g); g.connect(this.ctx.destination); o.type='triangle'; o.frequency.value=f; g.gain.setValueAtTime(0,this.ctx.currentTime); g.gain.linearRampToValueAtTime(0.3,this.ctx.currentTime+0.1); g.gain.exponentialRampToValueAtTime(0.01,this.ctx.currentTime+1.5); o.start(); o.stop(this.ctx.currentTime+1.5); }); }
+    };
+
+    // --- 遊戲資料 (區分日夜出現魚種) ---
+    const FISH_DATABASE = [
+      // 廢棄物
+      { name: "破舊的靴子", icon: "🥾", rarity: "trash", color: "text-gray-400", hex: "#9ca3af", minLen: 20, maxLen: 30, minPrice: 0, maxPrice: 1, chance: 5, baseDiff: 1, time: "both" },
+      { name: "纏人的海草", icon: "🌿", rarity: "trash", color: "text-green-600", hex: "#16a34a", minLen: 10, maxLen: 50, minPrice: 0, maxPrice: 2, chance: 5, baseDiff: 1, time: "both" },
+      { name: "泡水的背包", icon: "🎒", rarity: "trash", color: "text-amber-700", hex: "#b45309", minLen: 30, maxLen: 50, minPrice: 0, maxPrice: 5, chance: 5, baseDiff: 2, time: "both" },
+      
+      // 日行性
+      { name: "海瓜子", icon: "🐚", rarity: "common", color: "text-white", hex: "#ffffff", minLen: 2, maxLen: 5, minPrice: 5, maxPrice: 10, chance: 15, baseDiff: 1, time: "day" },
+      { name: "雀鯛", icon: "🐟", rarity: "common", color: "text-white", hex: "#ffffff", minLen: 5, maxLen: 15, minPrice: 10, maxPrice: 20, chance: 15, baseDiff: 2, time: "day" },
+      { name: "沙丁魚", icon: "🐟", rarity: "common", color: "text-white", hex: "#ffffff", minLen: 10, maxLen: 20, minPrice: 15, maxPrice: 30, chance: 10, baseDiff: 2, time: "day" },
+      { name: "竹筴魚", icon: "🐟", rarity: "uncommon", color: "text-green-400", hex: "#4ade80", minLen: 20, maxLen: 35, minPrice: 40, maxPrice: 80, chance: 10, baseDiff: 3, time: "both" },
+      { name: "烏魚", icon: "🐟", rarity: "uncommon", color: "text-green-400", hex: "#4ade80", minLen: 30, maxLen: 50, minPrice: 60, maxPrice: 120, chance: 8, baseDiff: 4, time: "day" },
+      { name: "黑鯛", icon: "🐟", rarity: "rare", color: "text-blue-400", hex: "#60a5fa", minLen: 30, maxLen: 50, minPrice: 150, maxPrice: 300, chance: 5, baseDiff: 5, time: "day" },
+      
+      // 夜行性
+      { name: "魷魚", icon: "🦑", rarity: "common", color: "text-white", hex: "#ffffff", minLen: 15, maxLen: 40, minPrice: 20, maxPrice: 50, chance: 20, baseDiff: 2, time: "night" },
+      { name: "白帶魚", icon: "🐟", rarity: "uncommon", color: "text-green-400", hex: "#4ade80", minLen: 60, maxLen: 150, minPrice: 70, maxPrice: 140, chance: 12, baseDiff: 4, time: "night" },
+      { name: "星鰻", icon: "🐟", rarity: "rare", color: "text-blue-400", hex: "#60a5fa", minLen: 40, maxLen: 80, minPrice: 180, maxPrice: 350, chance: 6, baseDiff: 6, time: "night" },
+
+      // 高階雙棲
+      { name: "紅槽", icon: "🐟", rarity: "rare", color: "text-blue-400", hex: "#60a5fa", minLen: 35, maxLen: 60, minPrice: 180, maxPrice: 350, chance: 5, baseDiff: 5, time: "day" },
+      { name: "鮭魚", icon: "🐟", rarity: "epic", color: "text-purple-400", hex: "#c084fc", minLen: 50, maxLen: 100, minPrice: 800, maxPrice: 1500, chance: 3, baseDiff: 8, time: "day" },
+      { name: "石斑", icon: "🐟", rarity: "epic", color: "text-purple-400", hex: "#c084fc", minLen: 60, maxLen: 120, minPrice: 1000, maxPrice: 2000, chance: 3, baseDiff: 8, time: "both" },
+      { name: "燈籠魚", icon: "🐟", rarity: "epic", color: "text-purple-400", hex: "#c084fc", minLen: 20, maxLen: 45, minPrice: 900, maxPrice: 1800, chance: 3, baseDiff: 8, time: "night" },
+      { name: "夜光章魚", icon: "🐙", rarity: "epic", color: "text-purple-400", hex: "#c084fc", minLen: 30, maxLen: 70, minPrice: 1200, maxPrice: 2200, chance: 2, baseDiff: 9, time: "night" },
+
+      // 傳說
+      { name: "傳說黃金石斑", icon: "👑", rarity: "legendary", color: "text-yellow-400", hex: "#facc15", minLen: 100, maxLen: 200, minPrice: 5000, maxPrice: 10000, chance: 1, baseDiff: 10, time: "day" },
+      { name: "幽靈魟魚", icon: "👑", rarity: "legendary", color: "text-yellow-400", hex: "#facc15", minLen: 150, maxLen: 300, minPrice: 6000, maxPrice: 12000, chance: 1, baseDiff: 10, time: "night" },
+    ];
+
+    const generateFish = (gameTime) => {
+      const isNight = gameTime < 360 || gameTime > 1080; 
+      const availableFish = FISH_DATABASE.filter(f => f.time === "both" || (isNight ? f.time === "night" : f.time === "day"));
+      
+      const totalChance = availableFish.reduce((acc, f) => acc + f.chance, 0);
+      let rand = Math.random() * totalChance;
+      let selectedFish = availableFish[0];
+      
+      for (let fish of availableFish) {
+        if (rand <= fish.chance) { selectedFish = fish; break; }
+        rand -= fish.chance;
+      }
+      
+      const length = Math.floor(Math.random() * (selectedFish.maxLen - selectedFish.minLen + 1)) + selectedFish.minLen;
+      const price = Math.floor(Math.random() * (selectedFish.maxPrice - selectedFish.minPrice + 1)) + selectedFish.minPrice;
+      const sizeRatio = (length - selectedFish.minLen) / (selectedFish.maxLen - selectedFish.minLen || 1);
+      return { ...selectedFish, length, price, id: Date.now() + Math.random(), difficulty: selectedFish.baseDiff + (sizeRatio * 2) };
+    };
+
+    const evaluateRank = (earnings) => {
+      if (earnings >= 8000) return { rank: 'S', color: 'text-yellow-400', text: '傳奇海神！釣魚界的活傳說！' };
+      if (earnings >= 3000) return { rank: 'A', color: 'text-purple-400', text: '釣魚大師！收穫驚人！' };
+      if (earnings >= 1000) return { rank: 'B', color: 'text-blue-400', text: '釣魚高手！滿載而歸！' };
+      if (earnings >= 100) return { rank: 'C', color: 'text-green-400', text: '普普通通，還算能糊口。' };
+      return { rank: 'D', color: 'text-gray-400', text: '今天運氣真差，下次再努力吧...' };
+    };
+
+    // --- 元件: 結算跑分畫面 ---
+    const SummaryPanel = ({ inventory, totalEarned, onRestart, onGoHome }) => {
+      const [displayIndex, setDisplayIndex] = useState(-1); 
+      const [runningTotal, setRunningTotal] = useState(0);
+      const [isFinished, setIsFinished] = useState(false);
+      const endRef = useRef(null);
+
+      useEffect(() => {
+        const startDelay = setTimeout(() => setDisplayIndex(0), 600);
+        return () => clearTimeout(startDelay);
+      }, []);
+
+      useEffect(() => {
+        if (displayIndex >= 0 && displayIndex < inventory.length) {
+          const timer = setTimeout(() => {
+            SoundEngine.playTally();
+            setRunningTotal(prev => prev + inventory[displayIndex].price);
+            setDisplayIndex(prev => prev + 1);
+            if (endRef.current) endRef.current.scrollIntoView({ behavior: 'smooth' });
+          }, 250); 
+          return () => clearTimeout(timer);
+        } else if (displayIndex === inventory.length && !isFinished) {
+          setIsFinished(true);
+          setTimeout(() => { SoundEngine.playGrandTotal(); }, 400);
+        }
+      }, [displayIndex, inventory, isFinished]);
+
+      return (
+        <div className="absolute inset-0 bg-slate-900 bg-opacity-95 flex items-center justify-center p-4 z-50 backdrop-blur-md select-none anim-fade-in">
+          <div className="bg-slate-800 border-4 border-amber-600 rounded-3xl flex flex-col max-w-md w-full h-[85vh] shadow-[0_0_50px_rgba(217,119,6,0.2)]">
+            <div className="p-6 border-b-2 border-slate-700 flex-none text-center">
+              <h2 className="text-3xl font-black text-white mb-2 tracking-widest">今日收穫總結</h2>
+              <p className="text-gray-400 text-sm">成果發表時間！</p>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 relative custom-scrollbar">
+              {inventory.length === 0 && isFinished && (
+                 <div className="flex flex-col items-center justify-center h-full text-gray-500 anim-fade-in">
+                   <span className="text-6xl mb-4 opacity-50">🎣</span>
+                   <span className="text-xl font-bold">空手而歸...</span>
+                 </div>
+              )}
+              {inventory.slice(0, displayIndex).map((fish, idx) => (
+                <div key={`${fish.id}-${idx}`} className="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-700 anim-slide-in-right">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl drop-shadow-md">{fish.icon}</span>
+                    <span className={`font-bold text-lg ${fish.color}`}>{fish.name}</span>
+                  </div>
+                  <span className="text-yellow-400 font-mono font-bold text-lg">+ ${fish.price}</span>
+                </div>
+              ))}
+              <div ref={endRef} className="h-2"></div>
+            </div>
+
+            <div className="p-6 bg-slate-900 rounded-b-3xl border-t-4 border-slate-700 flex-none">
+              <div className="flex justify-between items-end mb-4">
+                <span className="text-gray-400 text-lg">總計金額</span>
+                <span className={`font-black text-4xl transition-all duration-300 ${isFinished ? 'text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)] scale-110 origin-right' : 'text-white'}`}>
+                  $ {runningTotal.toLocaleString()}
+                </span>
+              </div>
+              {isFinished && (
+                <div className="mb-6 pt-4 border-t-2 border-dashed border-slate-700 flex flex-col items-center anim-fade-in-up">
+                  <span className="text-gray-400 text-sm mb-1">釣魚大師評價</span>
+                  <div className={`text-5xl font-black ${evaluateRank(runningTotal).color} drop-shadow-lg mb-1`}>{evaluateRank(runningTotal).rank}</div>
+                  <span className={`font-bold text-sm ${evaluateRank(runningTotal).color} text-center`}>{evaluateRank(runningTotal).text}</span>
+                </div>
+              )}
               
-              {/* 雙腿行走 (控制在 10 個循環後停止 = 3.5s) */}
-              <rect x="-12" y="-20" width="8" height="20" rx="4" fill="#111" className="anim-leg-walk" style={{transformOrigin: '-8px -20px'}} />
-              <rect x="4" y="-20" width="8" height="20" rx="4" fill="#111" className="anim-leg-walk-reverse" style={{transformOrigin: '8px -20px'}} />
+              <div className="flex gap-3">
+                <button disabled={!isFinished} onClick={onRestart} className={`flex-1 py-4 font-bold text-xl rounded-xl transition-all ${isFinished ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_6px_0_rgb(30,58,138)] active:shadow-[0_0px_0_rgb(30,58,138)] active:translate-y-1' : 'bg-slate-700 text-slate-500 cursor-not-allowed'}`}>
+                  {isFinished ? '再玩一次！' : '結算中...'}
+                </button>
+                <button disabled={!isFinished} onClick={onGoHome} className={`px-4 py-4 font-bold text-lg rounded-xl transition-all ${isFinished ? 'bg-orange-600 hover:bg-orange-500 text-white shadow-[0_6px_0_rgb(153,56,21)] active:shadow-[0_0px_0_rgb(153,56,21)] active:translate-y-1' : 'bg-slate-700 text-slate-500 cursor-not-allowed'}`}>
+                  回家囉
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // --- 元件: 結局動畫畫面 (夕陽光普照地面、透視路面捲動、停頓全身 Iris Out) ---
+    const EndingScreen = ({ totalEarned }) => {
+      const isHappy = totalEarned > 0; 
+
+      useEffect(() => {
+        SoundEngine.init();
+        SoundEngine.playEndingBGM();
+        return () => SoundEngine.stopBGM();
+      }, []);
+
+      return (
+        <div className="absolute inset-0 bg-black overflow-hidden select-none z-50 flex items-center justify-center">
+          
+          <svg viewBox="0 0 800 500" preserveAspectRatio="xMidYMax slice" className="w-full h-full absolute inset-0 object-cover pointer-events-none">
+            <defs>
+              <linearGradient id="sunsetGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#7c2d12" />
+                <stop offset="60%" stopColor="#ea580c" />
+                <stop offset="100%" stopColor="#fcd34d" />
+              </linearGradient>
+
+              {/* 地面夕陽光輝漸層 */}
+              <linearGradient id="groundSunGrad" x1="0" y1="0" x2="0" y2="1">
+                 <stop offset="0%" stopColor="#ea580c" />
+                 <stop offset="40%" stopColor="#9a3412" />
+                 <stop offset="100%" stopColor="#2c0c04" />
+              </linearGradient>
+
+              {/* 鄉間小路光輝漸層 */}
+              <linearGradient id="pathSunGrad" x1="0" y1="0" x2="0" y2="1">
+                 <stop offset="0%" stopColor="#f59e0b" />
+                 <stop offset="50%" stopColor="#b45309" />
+                 <stop offset="100%" stopColor="#431407" />
+              </linearGradient>
               
-              {/* 上半身、頭、手臂 */}
-              <g transform={isHappy ? "" : "rotate(15, 0, -45)"}> 
-                <rect x="-15" y="-55" width="30" height="35" rx="8" fill="#111" />
-                <ellipse cx="0" cy="-60" rx="25" ry="6" fill="#111" />
-                <circle cx="0" cy="-65" r="14" fill="#111" />
-                <path d="M -15 -62 Q 0 -80 15 -62 Z" fill="#111" />
+              {/* 限制路面橫線捲動的遮罩區塊 */}
+              <clipPath id="roadClip">
+                <polygon points="390,380 410,380 650,500 150,500" />
+              </clipPath>
+
+              {/* 鏡頭縮圈遮罩 (精準對位在走到一半的漁夫中心: X=400, Y=430) 
+                  確保停頓時的半徑為 160，足以包覆漁夫全身與釣竿 */}
+              <clipPath id="irisMask">
+                <circle cx="400" cy="430" r="1200">
+                  <animate attributeName="r" values="1200; 160; 160; 0" keyTimes="0; 0.4; 0.8; 1" dur="4s" begin="3.5s" fill="freeze" />
+                </circle>
+              </clipPath>
+            </defs>
+            
+            {/* 全畫面套用 Iris Out 遮罩 */}
+            <g clipPath="url(#irisMask)">
+              {/* 夕陽天空 */}
+              <rect width="1000" height="500" fill="url(#sunsetGrad)" />
+              
+              {/* 太陽：圖層置於山脈後方，精準被右側斜坡遮擋，只露出外角餘暉 */}
+              <circle cx="465" cy="325" r="40" fill="#fef08a" opacity="0.9" />
+              
+              {/* 遠景山脈 (些微溫暖的反光) */}
+              <path d="M 0 380 L 120 220 L 260 280 L 400 320 L 540 260 L 720 180 L 880 290 L 1000 230 L 1000 380 Z" fill="#4a1504" opacity="1" />
+              
+              {/* 地面 (夕陽光芒普照的漸層) */}
+              <rect y="380" width="1000" height="120" fill="url(#groundSunGrad)" />
+              
+              {/* 鄉間小路 (透視，消失於 400,380，帶有夕陽反光) */}
+              <polygon points="390,380 410,380 650,500 150,500" fill="url(#pathSunGrad)" />
+
+              {/* 3D 捲動特效：路面橫紋向觀眾飛來，3.5 秒精準停止 */}
+              <g clipPath="url(#roadClip)">
+                 <g className="anim-road-line-1">
+                   <line x1="300" y1="380" x2="500" y2="380" stroke="#431407" />
+                 </g>
+                 <g className="anim-road-line-2">
+                   <line x1="300" y1="380" x2="500" y2="380" stroke="#431407" />
+                 </g>
+                 <g className="anim-road-line-3">
+                   <line x1="300" y1="380" x2="500" y2="380" stroke="#431407" />
+                 </g>
+              </g>
+
+              {/* 草叢剪影 (保持溫暖的暗色系) */}
+              <g fill="#2c0c04">
+                <polygon points="360,390 350,390 370,390" />
+                <polygon points="320,410 300,410 330,410" />
+                <polygon points="250,440 220,440 270,440" />
+                <polygon points="180,480 140,480 210,480" />
+                <polygon points="440,390 450,390 430,390" />
+                <polygon points="480,410 500,410 470,410" />
+                <polygon points="550,440 580,440 530,440" />
+                <polygon points="620,480 660,480 590,480" />
+              </g>
+
+              {/* 漁夫背影動畫 (走到畫面一半的 X=400, Y=430 停止，不縮小) */}
+              <g className="anim-walk-away">
                 
-                {/* 右手提漁獲箱 */}
-                <rect x="10" y="-50" width="6" height="25" rx="3" fill="#111" transform="rotate(-15 10 -50)" />
-                <rect x="15" y="-25" width="20" height="16" rx="2" fill="#111" />
-                
-                {/* 左手扛釣竿 */}
-                <rect x="-16" y="-50" width="6" height="25" rx="3" fill="#111" transform="rotate(15 -16 -50)" />
-                <line x1="-22" y1="-25" x2="-80" y2="-130" stroke="#111" strokeWidth="4" strokeLinecap="round" />
-                <circle cx="-35" cy="-55" r="7" fill="#111" />
+                {/* 動態心情音符 */}
+                {isHappy && (
+                  <g>
+                    <text x="15" y="-75" fill="#fcd34d" fontSize="24" fontWeight="bold" className="anim-float-note-1">♪</text>
+                    <text x="-5" y="-85" fill="#fcd34d" fontSize="28" fontWeight="bold" className="anim-float-note-2">♫</text>
+                  </g>
+                )}
+
+                <g className="anim-bob">
+                  <ellipse cx="0" cy="0" rx="20" ry="3" fill="black" opacity="0.5" />
+                  
+                  {/* 雙腿行走 (控制在 10 個循環後停止 = 3.5s) */}
+                  <rect x="-12" y="-20" width="8" height="20" rx="4" fill="#111" className="anim-leg-walk" style={{transformOrigin: '-8px -20px'}} />
+                  <rect x="4" y="-20" width="8" height="20" rx="4" fill="#111" className="anim-leg-walk-reverse" style={{transformOrigin: '8px -20px'}} />
+                  
+                  {/* 上半身、頭、手臂 */}
+                  <g transform={isHappy ? "" : "rotate(15, 0, -45)"}> 
+                    <rect x="-15" y="-55" width="30" height="35" rx="8" fill="#111" />
+                    <ellipse cx="0" cy="-60" rx="25" ry="6" fill="#111" />
+                    <circle cx="0" cy="-65" r="14" fill="#111" />
+                    <path d="M -15 -62 Q 0 -80 15 -62 Z" fill="#111" />
+                    
+                    {/* 右手提漁獲箱 */}
+                    <rect x="10" y="-50" width="6" height="25" rx="3" fill="#111" transform="rotate(-15 10 -50)" />
+                    <rect x="15" y="-25" width="20" height="16" rx="2" fill="#111" />
+                    
+                    {/* 左手扛釣竿 */}
+                    <rect x="-16" y="-50" width="6" height="25" rx="3" fill="#111" transform="rotate(15 -16 -50)" />
+                    <line x1="-22" y1="-25" x2="-80" y2="-130" stroke="#111" strokeWidth="4" strokeLinecap="round" />
+                    <circle cx="-35" cy="-55" r="7" fill="#111" />
+                  </g>
+                </g>
               </g>
             </g>
-          </g>
-        </g>
-      </svg>
+          </svg>
 
-      {/* 結尾文字 (全黑後淡入，隨後徹底淡出結束) */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-         <h1 className="text-white text-3xl md:text-5xl font-black drop-shadow-[0_5px_10px_rgba(0,0,0,0.8)] tracking-[0.2em] opacity-0 anim-text-fade">
-           下次再來釣魚吧！
-         </h1>
-      </div>
-    </div>
-  );
-}
-
-// --- 釣魚小遊戲元件 (支援難度動態調整、天氣加成) ---
-const FishingMiniGame = ({ fish, difficultySettings, weather, onWin, onLose }) => {
-  const isSimple = difficultySettings === 'simple';
-  const diff = fish.difficulty;
-  
-  const weatherSpeedMult = weather === 'rainy' ? 1.3 : 1;
-
-  const BAR_HEIGHT = Math.max(12, (30 - diff * 1.5) * (isSimple ? 1.25 : 1)); 
-  const FISH_HEIGHT = 8; 
-  const MAX_PROGRESS = 100 + diff * 10; 
-  const INITIAL_PROGRESS = MAX_PROGRESS * 0.3; 
-  const FISH_SPEED = (18 + diff * 3.5) * (isSimple ? 0.8 : 1) * weatherSpeedMult; 
-  const JITTER_AMOUNT = (diff > 5 ? (diff - 5) * 0.7 : 0) * (isSimple ? 0.5 : 1); 
-
-  const barRef = useRef(null); const fishRef = useRef(null); const progressRef = useRef(null);
-  const stateRef = useRef({ fishY: 50, fishTargetY: 50, fishTimer: 0, barY: 0, barVelocity: 0, isHolding: false, progress: INITIAL_PROGRESS, time: 0, gameActive: true });
-
-  useEffect(() => { return () => SoundEngine.stopReeling(); }, []);
-
-  useEffect(() => {
-    let animationFrameId; let lastTime;
-    const loop = (currentTime) => {
-      const state = stateRef.current;
-      if (!state.gameActive) return;
-      if (lastTime === undefined) { lastTime = currentTime; animationFrameId = requestAnimationFrame(loop); return; }
-      const deltaTime = Math.max(0.001, Math.min((currentTime - lastTime) / 1000, 0.05));
-      lastTime = currentTime; state.time += deltaTime;
-
-      const ACCELERATION = 2200; 
-      if (state.isHolding) state.barVelocity += ACCELERATION * deltaTime; else state.barVelocity -= ACCELERATION * deltaTime; 
-      state.barVelocity *= 0.82; 
-      state.barY += state.barVelocity * deltaTime;
-      if (state.barY < 0) { state.barY = 0; state.barVelocity = 0; }
-      if (state.barY > 100 - BAR_HEIGHT) { state.barY = 100 - BAR_HEIGHT; state.barVelocity = 0; }
-
-      state.fishTimer -= deltaTime;
-      if (state.fishTimer <= 0) {
-        state.fishTargetY = Math.random() * (100 - FISH_HEIGHT);
-        state.fishTimer = (0.4 + Math.random() * Math.max(0.3, 1.5 - diff * 0.1)) * (isSimple ? 1.25 : 1);
-      }
-      const diffY = state.fishTargetY - state.fishY;
-      state.fishY += Math.sign(diffY) * Math.min(Math.abs(diffY), FISH_SPEED * deltaTime);
-      if (JITTER_AMOUNT > 0) state.fishY += Math.sin(state.time * 15) * JITTER_AMOUNT * deltaTime * 60;
-      if (state.fishY < 0) state.fishY = 0;
-      if (state.fishY > 100 - FISH_HEIGHT) state.fishY = 100 - FISH_HEIGHT;
-
-      const fishCenter = state.fishY + FISH_HEIGHT / 2;
-      const barCenter = state.barY + BAR_HEIGHT / 2;
-      const isOverlap = Math.abs(fishCenter - barCenter) < (BAR_HEIGHT / 2);
-      
-      if (isOverlap) { 
-        const baseGain = 20 + (1 - (Math.abs(fishCenter - barCenter) / (BAR_HEIGHT / 2))) * 15;
-        state.progress += baseGain * (isSimple ? 1.2 : 1) * deltaTime; 
-      } 
-      else { 
-        state.progress -= (8 + diff * 1.0) * (isSimple ? 0.8 : 1) * deltaTime; 
-      }
-
-      if (barRef.current) barRef.current.style.bottom = `${state.barY}%`;
-      if (fishRef.current) fishRef.current.style.bottom = `${state.fishY}%`;
-      if (progressRef.current) progressRef.current.style.height = `${Math.max(0, Math.min(100, (state.progress / MAX_PROGRESS) * 100))}%`;
-
-      if (state.progress >= MAX_PROGRESS) { state.gameActive = false; onWin(); return; } 
-      else if (state.progress <= 0) { state.gameActive = false; onLose(); return; }
-
-      animationFrameId = requestAnimationFrame(loop);
-    };
-    animationFrameId = requestAnimationFrame(loop);
-    return () => { stateRef.current.gameActive = false; cancelAnimationFrame(animationFrameId); };
-  }, [onWin, onLose, diff, BAR_HEIGHT, FISH_SPEED, MAX_PROGRESS, JITTER_AMOUNT, isSimple]);
-
-  return (
-    <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70 z-50 backdrop-blur-sm p-4">
-      <div className="bg-gray-800 p-4 md:p-6 rounded-2xl border-4 border-gray-600 flex flex-col items-center select-none shadow-2xl w-full max-w-sm">
-        <h3 className="text-white text-lg md:text-xl font-bold mb-1">將魚保持在綠色區塊內！</h3>
-        <p className="text-gray-400 text-xs md:text-sm mb-4 md:mb-6">
-          難度: <span className={fish.color}>{fish.rarity.toUpperCase()}</span>
-          {isSimple && <span className="ml-2 bg-green-700 text-white px-2 py-0.5 rounded-full text-[10px]">簡單模式</span>}
-        </p>
-        <div className="flex gap-6 md:gap-8 items-center h-56 md:h-72">
-          <div className="relative w-12 md:w-14 h-full bg-blue-950 border-4 border-gray-700 rounded-lg overflow-hidden shadow-inner">
-            <div ref={barRef} className="absolute w-full bg-green-500 opacity-80" style={{ height: `${BAR_HEIGHT}%`, bottom: `0%`, boxShadow: '0 0 15px rgba(34, 197, 94, 0.9) inset', borderTop: '2px solid #86efac', borderBottom: '2px solid #86efac' }} />
-            <div ref={fishRef} className="absolute w-full flex items-center justify-center" style={{ height: `${FISH_HEIGHT}%`, bottom: `50%` }}><span className="text-xl md:text-2xl drop-shadow-md" style={{ transform: 'scaleX(-1)' }}>{fish.icon}</span></div>
-          </div>
-          <div className="w-6 md:w-8 h-full bg-gray-900 border-4 border-gray-700 rounded-lg relative flex items-end overflow-hidden shadow-inner">
-            <div ref={progressRef} className="w-full" style={{ height: `${(INITIAL_PROGRESS / MAX_PROGRESS) * 100}%`, background: `linear-gradient(to top, #ef4444 0%, #eab308 50%, #22c55e 100%)`, boxShadow: '0 0 10px rgba(255,255,255,0.2) inset' }} />
-            <div className="absolute bottom-[30%] w-full h-[2px] bg-white opacity-40"></div>
+          {/* 結尾文字 (全黑後淡入，隨後徹底淡出結束) */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+             <h1 className="text-white text-3xl md:text-5xl font-black drop-shadow-[0_5px_10px_rgba(0,0,0,0.8)] tracking-[0.2em] opacity-0 anim-text-fade">
+               下次再來釣魚吧！
+             </h1>
           </div>
         </div>
-        <button
-          className="mt-6 md:mt-8 w-full max-w-[200px] py-4 md:py-5 bg-blue-600 active:bg-blue-800 text-white font-bold text-xl md:text-2xl rounded-2xl shadow-[0_6px_0_rgb(30,58,138)] active:shadow-[0_0px_0_rgb(30,58,138)] active:translate-y-1 select-none touch-none transition-all"
-          onPointerDown={(e) => { if(e.cancelable) e.preventDefault(); stateRef.current.isHolding = true; SoundEngine.startReeling(); }}
-          onPointerUp={(e) => { if(e.cancelable) e.preventDefault(); stateRef.current.isHolding = false; SoundEngine.stopReeling(); }}
-          onPointerLeave={(e) => { if(e.cancelable) e.preventDefault(); stateRef.current.isHolding = false; SoundEngine.stopReeling(); }}
-          onContextMenu={(e) => e.preventDefault()}
-        >卷線 (按住)</button>
-      </div>
-    </div>
-  );
-};
-
-// --- 主應用程式 ---
-export default function App() {
-  const [appState, setAppState] = useState('UNLOCK'); 
-  const [posture, setPosture] = useState('standing'); 
-  const [gameMode, setGameMode] = useState('endless');
-  const [gameDifficulty, setGameDifficulty] = useState('classic'); 
-  
-  const [weather, setWeather] = useState('sunny'); 
-  const [gameTime, setGameTime] = useState(360); 
-  const [totalTimeMs, setTotalTimeMs] = useState(0); 
-  const [timeLeft, setTimeLeft] = useState(0);
-
-  const [gameState, setGameState] = useState('IDLE'); 
-  const [inventory, setInventory] = useState([]);
-  const [hookedFish, setHookedFish] = useState(null);
-  const [caughtFish, setCaughtFish] = useState(null);
-  const [totalEarned, setTotalEarned] = useState(0);
-  
-  const [startMinutes, setStartMinutes] = useState(3);
-  const [startMode, setStartMode] = useState('endless');
-  const [startDiff, setStartDiff] = useState('simple');
-
-  const waitTimer = useRef(null);
-  const biteTimer = useRef(null);
-  const gameStateRef = useRef(gameState);
-  
-  useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
-
-  const formatTime = (t) => {
-    const h = Math.floor(t / 60).toString().padStart(2, '0');
-    const m = (t % 60).toString().padStart(2, '0');
-    return `${h}:${m}`;
-  };
-
-  const getSkyOpacities = (t) => {
-    let night = 0; let sunset = 0; let dim = 0;
-    if (t <= 300 || t >= 1140) night = 0.85; 
-    else if (t > 300 && t < 420) { 
-        sunset = Math.sin(((t - 300) / 120) * Math.PI) * 0.7;
-        night = (1 - (t - 300) / 120) * 0.85;
-    } else if (t > 1020 && t < 1140) { 
-        sunset = Math.sin(((t - 1020) / 120) * Math.PI) * 0.7;
-        night = ((t - 1020) / 120) * 0.85;
+      );
     }
-    
-    if (weather === 'cloudy' || weather === 'rainy') dim = 0.25;
 
-    return { night, sunset, dim };
-  };
+    // --- 釣魚小遊戲元件 (支援難度動態調整、天氣加成) ---
+    const FishingMiniGame = ({ fish, difficultySettings, weather, onWin, onLose }) => {
+      const isSimple = difficultySettings === 'simple';
+      const diff = fish.difficulty;
+      
+      const weatherSpeedMult = weather === 'rainy' ? 1.3 : 1;
 
-  const handleUnlock = () => {
-    SoundEngine.init();
-    SoundEngine.playBGM();
-    setAppState('START');
-  };
+      const BAR_HEIGHT = Math.max(12, (30 - diff * 1.5) * (isSimple ? 1.25 : 1)); 
+      const FISH_HEIGHT = 8; 
+      const MAX_PROGRESS = 100 + diff * 10; 
+      const INITIAL_PROGRESS = MAX_PROGRESS * 0.3; 
+      const FISH_SPEED = (18 + diff * 3.5) * (isSimple ? 0.8 : 1) * weatherSpeedMult; 
+      const JITTER_AMOUNT = (diff > 5 ? (diff - 5) * 0.7 : 0) * (isSimple ? 0.5 : 1); 
 
-  const handleStartGame = (mode, difficulty, timeInSeconds) => {
-    setGameMode(mode);
-    setGameDifficulty(difficulty);
-    const w = ['sunny', 'cloudy', 'rainy'][Math.floor(Math.random() * 3)];
-    setWeather(w);
+      const barRef = useRef(null); const fishRef = useRef(null); const progressRef = useRef(null);
+      const stateRef = useRef({ fishY: 50, fishTargetY: 50, fishTimer: 0, barY: 0, barVelocity: 0, isHolding: false, progress: INITIAL_PROGRESS, time: 0, gameActive: true });
 
-    if (mode === 'timed' && timeInSeconds) {
-      setTotalTimeMs(timeInSeconds);
-      setTimeLeft(timeInSeconds);
-    } else {
-      setTimeLeft(0);
-    }
-    setInventory([]);
-    setTotalEarned(0);
-    setGameTime(360); 
-    setGameState('IDLE');
-    setCaughtFish(null);
+      useEffect(() => { return () => SoundEngine.stopReeling(); }, []);
 
-    SoundEngine.stopBGM();
-    SoundEngine.playSit(); 
-    setPosture('sitting');
-    setAppState('TRANSITION_SIT');
-    
-    setTimeout(() => {
-      setAppState('PLAYING');
-    }, 1200);
-  };
+      useEffect(() => {
+        let animationFrameId; let lastTime;
+        const loop = (currentTime) => {
+          const state = stateRef.current;
+          if (!state.gameActive) return;
+          if (lastTime === undefined) { lastTime = currentTime; animationFrameId = requestAnimationFrame(loop); return; }
+          const deltaTime = Math.max(0.001, Math.min((currentTime - lastTime) / 1000, 0.05));
+          lastTime = currentTime; state.time += deltaTime;
 
-  const handleTriggerSummary = useCallback(() => {
-    if (appState !== 'PLAYING') return;
-    clearTimeout(waitTimer.current);
-    clearTimeout(biteTimer.current);
-    SoundEngine.stopReeling();
-    
-    SoundEngine.playStand(); 
-    setPosture('standing');
-    setAppState('TRANSITION_STAND');
-    
-    setTimeout(() => {
-      setAppState('SUMMARY');
-    }, 1200);
-  }, [appState]);
+          const ACCELERATION = 2200; 
+          if (state.isHolding) state.barVelocity += ACCELERATION * deltaTime; else state.barVelocity -= ACCELERATION * deltaTime; 
+          state.barVelocity *= 0.82; 
+          state.barY += state.barVelocity * deltaTime;
+          if (state.barY < 0) { state.barY = 0; state.barVelocity = 0; }
+          if (state.barY > 100 - BAR_HEIGHT) { state.barY = 100 - BAR_HEIGHT; state.barVelocity = 0; }
 
-  const handleRestart = () => {
-    SoundEngine.playBGM();
-    setAppState('START');
-  };
-
-  const handleGoHome = () => {
-    setAppState('ENDING');
-  }
-
-  // 降低渲染頻率：1000 毫秒更新 1 分鐘遊戲時間
-  useEffect(() => {
-    if (appState !== 'PLAYING') return;
-    
-    const timeInterval = setInterval(() => {
-       setGameTime(prev => (prev + 1) % 1440);
-    }, 1000); 
-
-    let timerInterval = null;
-    if (gameMode === 'timed') {
-      timerInterval = setInterval(() => {
-        setTimeLeft(prev => {
-          if (prev <= 1) {
-            handleTriggerSummary(); 
-            return 0;
+          state.fishTimer -= deltaTime;
+          if (state.fishTimer <= 0) {
+            state.fishTargetY = Math.random() * (100 - FISH_HEIGHT);
+            state.fishTimer = (0.4 + Math.random() * Math.max(0.3, 1.5 - diff * 0.1)) * (isSimple ? 1.25 : 1);
           }
-          return prev - 1;
-        });
-      }, 1000);
-    }
+          const diffY = state.fishTargetY - state.fishY;
+          state.fishY += Math.sign(diffY) * Math.min(Math.abs(diffY), FISH_SPEED * deltaTime);
+          if (JITTER_AMOUNT > 0) state.fishY += Math.sin(state.time * 15) * JITTER_AMOUNT * deltaTime * 60;
+          if (state.fishY < 0) state.fishY = 0;
+          if (state.fishY > 100 - FISH_HEIGHT) state.fishY = 100 - FISH_HEIGHT;
 
-    return () => {
-      clearInterval(timeInterval);
-      if (timerInterval) clearInterval(timerInterval);
-    }
-  }, [appState, gameMode, handleTriggerSummary]);
+          const fishCenter = state.fishY + FISH_HEIGHT / 2;
+          const barCenter = state.barY + BAR_HEIGHT / 2;
+          const isOverlap = Math.abs(fishCenter - barCenter) < (BAR_HEIGHT / 2);
+          
+          if (isOverlap) { 
+            const baseGain = 20 + (1 - (Math.abs(fishCenter - barCenter) / (BAR_HEIGHT / 2))) * 15;
+            state.progress += baseGain * (isSimple ? 1.2 : 1) * deltaTime; 
+          } 
+          else { 
+            state.progress -= (8 + diff * 1.0) * (isSimple ? 0.8 : 1) * deltaTime; 
+          }
 
-  const getRodAngle = () => {
-    switch(gameState) {
-      case 'IDLE':     return -45;
-      case 'CASTING':  return 20; 
-      case 'WAITING':  return -10;
-      case 'NIBBLING': return -5;
-      case 'BITING':   return 10;
-      case 'HIT':      return -60;
-      case 'MINIGAME': return -35;
-      case 'PULLING_UP':return -80;
-      case 'CAUGHT':   return -60;
-      case 'ESCAPED':  return -30;
-      default:         return -45;
-    }
-  };
+          if (barRef.current) barRef.current.style.bottom = `${state.barY}%`;
+          if (fishRef.current) fishRef.current.style.bottom = `${state.fishY}%`;
+          if (progressRef.current) progressRef.current.style.height = `${Math.max(0, Math.min(100, (state.progress / MAX_PROGRESS) * 100))}%`;
 
-  const rodAngle = getRodAngle();
-  const showLine = ['WAITING', 'NIBBLING', 'BITING', 'HIT', 'MINIGAME'].includes(gameState);
-  const tipRadius = 290.6; const tipBaseAngle = 3.94 * (Math.PI / 180);
-  const currentRad = rodAngle * (Math.PI / 180) + tipBaseAngle;
-  const tipX = 160 + tipRadius * Math.cos(currentRad);
-  const tipY = 250 + tipRadius * Math.sin(currentRad);
-  const bobberX = tipX; const bobberY = 440; 
+          if (state.progress >= MAX_PROGRESS) { state.gameActive = false; onWin(); return; } 
+          else if (state.progress <= 0) { state.gameActive = false; onLose(); return; }
 
-  const castLine = () => {
-    if (gameState !== 'IDLE' && gameState !== 'ESCAPED' && gameState !== 'CAUGHT') return;
-    SoundEngine.playCast(); 
-    setCaughtFish(null);
-    setGameState('CASTING');
-    setTimeout(() => {
-      if (appState !== 'PLAYING') return; 
-      setGameState('WAITING');
-      setTimeout(() => SoundEngine.playNibble(), 300);
-      scheduleNextAction();
-    }, 600);
-  };
+          animationFrameId = requestAnimationFrame(loop);
+        };
+        animationFrameId = requestAnimationFrame(loop);
+        return () => { stateRef.current.gameActive = false; cancelAnimationFrame(animationFrameId); };
+      }, [onWin, onLose, diff, BAR_HEIGHT, FISH_SPEED, MAX_PROGRESS, JITTER_AMOUNT, isSimple]);
 
-  const scheduleNextAction = () => {
-    const weatherWaitMult = weather === 'rainy' ? 0.5 : (weather === 'cloudy' ? 0.8 : 1);
-    const timeToWait = (1500 + Math.random() * 3000) * weatherWaitMult;
+      return (
+        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70 z-50 backdrop-blur-sm p-4">
+          <div className="bg-gray-800 p-4 md:p-6 rounded-2xl border-4 border-gray-600 flex flex-col items-center select-none shadow-2xl w-full max-w-sm">
+            <h3 className="text-white text-lg md:text-xl font-bold mb-1">將魚保持在綠色區塊內！</h3>
+            <p className="text-gray-400 text-xs md:text-sm mb-4 md:mb-6">
+              難度: <span className={fish.color}>{fish.rarity.toUpperCase()}</span>
+              {isSimple && <span className="ml-2 bg-green-700 text-white px-2 py-0.5 rounded-full text-[10px]">簡單模式</span>}
+            </p>
+            <div className="flex gap-6 md:gap-8 items-center h-56 md:h-72">
+              <div className="relative w-12 md:w-14 h-full bg-blue-950 border-4 border-gray-700 rounded-lg overflow-hidden shadow-inner">
+                <div ref={barRef} className="absolute w-full bg-green-500 opacity-80" style={{ height: `${BAR_HEIGHT}%`, bottom: `0%`, boxShadow: '0 0 15px rgba(34, 197, 94, 0.9) inset', borderTop: '2px solid #86efac', borderBottom: '2px solid #86efac' }} />
+                <div ref={fishRef} className="absolute w-full flex items-center justify-center" style={{ height: `${FISH_HEIGHT}%`, bottom: `50%` }}><span className="text-xl md:text-2xl drop-shadow-md" style={{ transform: 'scaleX(-1)' }}>{fish.icon}</span></div>
+              </div>
+              <div className="w-6 md:w-8 h-full bg-gray-900 border-4 border-gray-700 rounded-lg relative flex items-end overflow-hidden shadow-inner">
+                <div ref={progressRef} className="w-full" style={{ height: `${(INITIAL_PROGRESS / MAX_PROGRESS) * 100}%`, background: `linear-gradient(to top, #ef4444 0%, #eab308 50%, #22c55e 100%)`, boxShadow: '0 0 10px rgba(255,255,255,0.2) inset' }} />
+                <div className="absolute bottom-[30%] w-full h-[2px] bg-white opacity-40"></div>
+              </div>
+            </div>
+            <button
+              className="mt-6 md:mt-8 w-full max-w-[200px] py-4 md:py-5 bg-blue-600 active:bg-blue-800 text-white font-bold text-xl md:text-2xl rounded-2xl shadow-[0_6px_0_rgb(30,58,138)] active:shadow-[0_0px_0_rgb(30,58,138)] active:translate-y-1 select-none touch-none transition-all"
+              onPointerDown={(e) => { if(e.cancelable) e.preventDefault(); stateRef.current.isHolding = true; SoundEngine.startReeling(); }}
+              onPointerUp={(e) => { if(e.cancelable) e.preventDefault(); stateRef.current.isHolding = false; SoundEngine.stopReeling(); }}
+              onPointerLeave={(e) => { if(e.cancelable) e.preventDefault(); stateRef.current.isHolding = false; SoundEngine.stopReeling(); }}
+              onContextMenu={(e) => e.preventDefault()}
+            >卷線 (按住)</button>
+          </div>
+        </div>
+      );
+    };
 
-    waitTimer.current = setTimeout(() => {
-      if (appState !== 'PLAYING') return;
-      if (Math.random() > 0.4) {
-        setGameState('NIBBLING');
-        SoundEngine.playNibble(); 
+    // --- 主應用程式 ---
+    function App() {
+      const [appState, setAppState] = useState('UNLOCK'); 
+      const [posture, setPosture] = useState('standing'); 
+      const [gameMode, setGameMode] = useState('endless');
+      const [gameDifficulty, setGameDifficulty] = useState('classic'); 
+      
+      const [weather, setWeather] = useState('sunny'); 
+      const [gameTime, setGameTime] = useState(360); 
+      const [totalTimeMs, setTotalTimeMs] = useState(0); 
+      const [timeLeft, setTimeLeft] = useState(0);
+
+      const [gameState, setGameState] = useState('IDLE'); 
+      const [inventory, setInventory] = useState([]);
+      const [hookedFish, setHookedFish] = useState(null);
+      const [caughtFish, setCaughtFish] = useState(null);
+      const [totalEarned, setTotalEarned] = useState(0);
+      
+      const [startMinutes, setStartMinutes] = useState(3);
+      const [startMode, setStartMode] = useState('endless');
+      const [startDiff, setStartDiff] = useState('simple');
+
+      const waitTimer = useRef(null);
+      const biteTimer = useRef(null);
+      const gameStateRef = useRef(gameState);
+      
+      useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
+
+      const formatTime = (t) => {
+        const h = Math.floor(t / 60).toString().padStart(2, '0');
+        const m = (t % 60).toString().padStart(2, '0');
+        return `${h}:${m}`;
+      };
+
+      const getSkyOpacities = (t) => {
+        let night = 0; let sunset = 0; let dim = 0;
+        if (t <= 300 || t >= 1140) night = 0.85; 
+        else if (t > 300 && t < 420) { 
+            sunset = Math.sin(((t - 300) / 120) * Math.PI) * 0.7;
+            night = (1 - (t - 300) / 120) * 0.85;
+        } else if (t > 1020 && t < 1140) { 
+            sunset = Math.sin(((t - 1020) / 120) * Math.PI) * 0.7;
+            night = ((t - 1020) / 120) * 0.85;
+        }
+        
+        if (weather === 'cloudy' || weather === 'rainy') dim = 0.25;
+
+        return { night, sunset, dim };
+      };
+
+      const handleUnlock = () => {
+        SoundEngine.init();
+        SoundEngine.playBGM();
+        setAppState('START');
+      };
+
+      const handleStartGame = (mode, difficulty, timeInSeconds) => {
+        setGameMode(mode);
+        setGameDifficulty(difficulty);
+        const w = ['sunny', 'cloudy', 'rainy'][Math.floor(Math.random() * 3)];
+        setWeather(w);
+
+        if (mode === 'timed' && timeInSeconds) {
+          setTotalTimeMs(timeInSeconds);
+          setTimeLeft(timeInSeconds);
+        } else {
+          setTimeLeft(0);
+        }
+        setInventory([]);
+        setTotalEarned(0);
+        setGameTime(360); 
+        setGameState('IDLE');
+        setCaughtFish(null);
+
+        SoundEngine.stopBGM();
+        SoundEngine.playSit(); 
+        setPosture('sitting');
+        setAppState('TRANSITION_SIT');
+        
+        setTimeout(() => {
+          setAppState('PLAYING');
+        }, 1200);
+      };
+
+      const handleTriggerSummary = useCallback(() => {
+        if (appState !== 'PLAYING') return;
+        clearTimeout(waitTimer.current);
+        clearTimeout(biteTimer.current);
+        SoundEngine.stopReeling();
+        
+        SoundEngine.playStand(); 
+        setPosture('standing');
+        setAppState('TRANSITION_STAND');
+        
+        setTimeout(() => {
+          setAppState('SUMMARY');
+        }, 1200);
+      }, [appState]);
+
+      const handleRestart = () => {
+        SoundEngine.playBGM();
+        setAppState('START');
+      };
+
+      const handleGoHome = () => {
+        setAppState('ENDING');
+      }
+
+      // 降低渲染頻率：1000 毫秒更新 1 分鐘遊戲時間
+      useEffect(() => {
+        if (appState !== 'PLAYING') return;
+        
+        const timeInterval = setInterval(() => {
+           setGameTime(prev => (prev + 1) % 1440);
+        }, 1000); 
+
+        let timerInterval = null;
+        if (gameMode === 'timed') {
+          timerInterval = setInterval(() => {
+            setTimeLeft(prev => {
+              if (prev <= 1) {
+                handleTriggerSummary(); 
+                return 0;
+              }
+              return prev - 1;
+            });
+          }, 1000);
+        }
+
+        return () => {
+          clearInterval(timeInterval);
+          if (timerInterval) clearInterval(timerInterval);
+        }
+      }, [appState, gameMode, handleTriggerSummary]);
+
+      const getRodAngle = () => {
+        switch(gameState) {
+          case 'IDLE':     return -45;
+          case 'CASTING':  return 20; 
+          case 'WAITING':  return -10;
+          case 'NIBBLING': return -5;
+          case 'BITING':   return 10;
+          case 'HIT':      return -60;
+          case 'MINIGAME': return -35;
+          case 'PULLING_UP':return -80;
+          case 'CAUGHT':   return -60;
+          case 'ESCAPED':  return -30;
+          default:         return -45;
+        }
+      };
+
+      const rodAngle = getRodAngle();
+      const showLine = ['WAITING', 'NIBBLING', 'BITING', 'HIT', 'MINIGAME'].includes(gameState);
+      const tipRadius = 290.6; const tipBaseAngle = 3.94 * (Math.PI / 180);
+      const currentRad = rodAngle * (Math.PI / 180) + tipBaseAngle;
+      const tipX = 160 + tipRadius * Math.cos(currentRad);
+      const tipY = 250 + tipRadius * Math.sin(currentRad);
+      const bobberX = tipX; const bobberY = 440; 
+
+      const castLine = () => {
+        if (gameState !== 'IDLE' && gameState !== 'ESCAPED' && gameState !== 'CAUGHT') return;
+        SoundEngine.playCast(); 
+        setCaughtFish(null);
+        setGameState('CASTING');
+        setTimeout(() => {
+          if (appState !== 'PLAYING') return; 
+          setGameState('WAITING');
+          setTimeout(() => SoundEngine.playNibble(), 300);
+          scheduleNextAction();
+        }, 600);
+      };
+
+      const scheduleNextAction = () => {
+        const weatherWaitMult = weather === 'rainy' ? 0.5 : (weather === 'cloudy' ? 0.8 : 1);
+        const timeToWait = (1500 + Math.random() * 3000) * weatherWaitMult;
+
         waitTimer.current = setTimeout(() => {
           if (appState !== 'PLAYING') return;
-          if (Math.random() > 0.3) triggerBite();
-          else { setGameState('WAITING'); scheduleNextAction(); }
-        }, 600 + Math.random() * 800);
-      } else { triggerBite(); }
-    }, timeToWait);
-  };
+          if (Math.random() > 0.4) {
+            setGameState('NIBBLING');
+            SoundEngine.playNibble(); 
+            waitTimer.current = setTimeout(() => {
+              if (appState !== 'PLAYING') return;
+              if (Math.random() > 0.3) triggerBite();
+              else { setGameState('WAITING'); scheduleNextAction(); }
+            }, 600 + Math.random() * 800);
+          } else { triggerBite(); }
+        }, timeToWait);
+      };
 
-  const triggerBite = () => {
-    setGameState('BITING');
-    SoundEngine.playBite(); 
-    const reactionTime = 700 + Math.random() * 600; 
-    biteTimer.current = setTimeout(() => {
-      if (appState === 'PLAYING' && gameStateRef.current === 'BITING') {
+      const triggerBite = () => {
+        setGameState('BITING');
+        SoundEngine.playBite(); 
+        const reactionTime = 700 + Math.random() * 600; 
+        biteTimer.current = setTimeout(() => {
+          if (appState === 'PLAYING' && gameStateRef.current === 'BITING') {
+              setGameState('ESCAPED');
+              SoundEngine.playFail(); 
+          }
+        }, reactionTime);
+      };
+
+      const hitHook = () => {
+        if (gameState === 'BITING') {
+          clearTimeout(biteTimer.current);
+          SoundEngine.playHit(); 
+          const fish = generateFish(gameTime); 
+          setHookedFish(fish);
+          setGameState('HIT');
+          setTimeout(() => {
+            if (appState === 'PLAYING') setGameState('MINIGAME');
+          }, 800);
+        } else if (gameState === 'WAITING' || gameState === 'NIBBLING') {
+          clearTimeout(waitTimer.current);
           setGameState('ESCAPED');
           SoundEngine.playFail(); 
-      }
-    }, reactionTime);
-  };
+        }
+      };
 
-  const hitHook = () => {
-    if (gameState === 'BITING') {
-      clearTimeout(biteTimer.current);
-      SoundEngine.playHit(); 
-      const fish = generateFish(gameTime); 
-      setHookedFish(fish);
-      setGameState('HIT');
-      setTimeout(() => {
-        if (appState === 'PLAYING') setGameState('MINIGAME');
-      }, 800);
-    } else if (gameState === 'WAITING' || gameState === 'NIBBLING') {
-      clearTimeout(waitTimer.current);
-      setGameState('ESCAPED');
-      SoundEngine.playFail(); 
-    }
-  };
-
-  const handleMiniGameWin = useCallback(() => {
-    setGameState('PULLING_UP');
-    SoundEngine.playHit(); 
-    
-    setTimeout(() => {
-        setCaughtFish(hookedFish);
-        setGameState('CAUGHT');
-        setInventory(prev => [hookedFish, ...prev]);
-        setTotalEarned(prev => prev + hookedFish.price);
-        SoundEngine.playVictory();
-    }, 800); 
-  }, [hookedFish]);
-
-  const handleMiniGameLose = useCallback(() => { 
-      setGameState('ESCAPED'); 
-      SoundEngine.playFail(); 
-  }, []);
-  
-  const resetGame = () => { setGameState('IDLE'); setCaughtFish(null); setHookedFish(null); };
-
-  const timeProgress = gameMode === 'timed' && totalTimeMs > 0 ? 1 - (timeLeft / totalTimeMs) : 0;
-  const duskOpacity = timeProgress > 0.8 ? (timeProgress - 0.8) * 5 : 0; 
-  const isSunnyDay = weather === 'sunny' && (gameTime > 300 && gameTime < 1140);
-  const isNight = gameTime < 360 || gameTime > 1080;
-
-  // 全域動畫與樣式設定
-  const globalStyles = `
-    @keyframes fade-in { 0% { opacity: 0; } 100% { opacity: 1; } }
-    @keyframes fade-in-up { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } }
-    @keyframes slide-in-right { 0% { opacity: 0; transform: translateX(30px); } 100% { opacity: 1; transform: translateX(0); } }
-    
-    /* 畫面正中央出水拋物線動畫 */
-    @keyframes fly-catch {
-      0% { transform: translate(400px, 380px) scale(0.2) rotate(0deg); }
-      50% { transform: translate(360px, 80px) scale(0.8) rotate(180deg); }
-      100% { transform: translate(320px, 180px) scale(1.5) rotate(360deg); }
-    }
-    
-    /* 結局走路: 從底部走到一半 (Y=500 -> Y=430) 不縮小 */
-    @keyframes walk-away { 
-      0% { transform: translate(400px, 500px); } 
-      100% { transform: translate(400px, 430px); } 
-    }
-
-    /* 道路透視捲動效果 - 純 CSS 3D 感，0.7秒循環5次剛好3.5秒停住 */
-    @keyframes road-scroll-line {
-      0% { transform: translateY(0px) scaleX(1); stroke-width: 1px; opacity: 0; }
-      10% { opacity: 0.6; }
-      90% { opacity: 0.6; }
-      100% { transform: translateY(120px) scaleX(5); stroke-width: 6px; opacity: 0; }
-    }
-    
-    /* Iris Out 縮圈動畫: 使用 ClipPath，中心對準 Y=390 (涵蓋走到一半的漁夫全身含釣竿)
-       設定 0-50% 縮圈，50-80% 停頓觀賞，80-100% 閉合至全黑 */
-    @keyframes iris-out-circle {
-      0% { clip-path: circle(150% at 50% 78%); -webkit-clip-path: circle(150% at 50% 78%); opacity: 1; }
-      50% { clip-path: circle(22% at 50% 78%); -webkit-clip-path: circle(22% at 50% 78%); opacity: 1; }
-      80% { clip-path: circle(22% at 50% 78%); -webkit-clip-path: circle(22% at 50% 78%); opacity: 1; }
-      99% { clip-path: circle(0% at 50% 78%); -webkit-clip-path: circle(0% at 50% 78%); opacity: 1; }
-      100% { clip-path: circle(0% at 50% 78%); -webkit-clip-path: circle(0% at 50% 78%); opacity: 0; }
-    }
-    
-    @keyframes bob { 0% { transform: translateY(0); } 100% { transform: translateY(-4px); } }
-    @keyframes leg-walk { 0% { transform: rotate(-25deg); } 100% { transform: rotate(25deg); } }
-    @keyframes leg-walk-reverse { 0% { transform: rotate(25deg); } 100% { transform: rotate(-25deg); } }
-
-    @keyframes float-note {
-      0% { transform: translateY(0px) translateX(0px); opacity: 0; }
-      20% { opacity: 1; }
-      80% { opacity: 1; }
-      100% { transform: translateY(-40px) translateX(15px); opacity: 0; }
-    }
-
-    /* 結尾文字淡出結束序列 */
-    @keyframes text-fade-sequence {
-      0% { opacity: 0; transform: scale(0.95); }
-      15% { opacity: 1; transform: scale(1); }
-      85% { opacity: 1; transform: scale(1); }
-      100% { opacity: 0; transform: scale(1.05); }
-    }
-
-    @keyframes cloud-drift { 0% { transform: translateX(-150px); } 100% { transform: translateX(900px); } }
-    @keyframes wave-move-1 { 0% { transform: translateX(0); } 100% { transform: translateX(-200px); } }
-    @keyframes wave-move-2 { 0% { transform: translateX(-100px); } 100% { transform: translateX(100px); } }
-
-    @keyframes rain-fall {
-      0% { transform: translateY(-50px) translateX(10px); opacity: 0; }
-      20% { opacity: 1; }
-      80% { opacity: 1; }
-      100% { transform: translateY(600px) translateX(-40px); opacity: 0; }
-    }
-
-    @keyframes campfire-flicker {
-      0% { opacity: 0.8; transform: scale(1); }
-      50% { opacity: 1; transform: scale(1.05); }
-      100% { opacity: 0.9; transform: scale(0.95); }
-    }
-
-    /* 綁定類別：精準控制所有動畫在 3.5 秒時停止 */
-    .anim-road-line-1 { animation: road-scroll-line 0.7s linear 5 forwards; transform-origin: 400px 380px; }
-    .anim-road-line-2 { animation: road-scroll-line 0.7s linear 5 forwards; transform-origin: 400px 380px; animation-delay: -0.23s; }
-    .anim-road-line-3 { animation: road-scroll-line 0.7s linear 5 forwards; transform-origin: 400px 380px; animation-delay: -0.46s; }
-
-    .anim-iris-out { animation: iris-out-circle 4.5s ease-in-out 3.5s forwards; }
-    .anim-walk-away { animation: walk-away 3.5s linear forwards; transform-origin: center; }
-    .anim-bob { animation: bob 0.35s alternate 10 forwards; }
-    .anim-leg-walk { animation: leg-walk 0.35s alternate 10 forwards; }
-    .anim-leg-walk-reverse { animation: leg-walk-reverse 0.35s alternate 10 forwards; }
-    
-    .anim-float-note-1 { animation: float-note 1.5s infinite; }
-    .anim-float-note-2 { animation: float-note 1.5s infinite 0.75s; }
-    .anim-text-fade { animation: text-fade-sequence 6s ease-in-out 8s forwards; }
-    .anim-rain-fall { animation: rain-fall infinite linear; }
-    .anim-campfire { animation: campfire-flicker 0.3s infinite alternate ease-in-out; }
-
-    .anim-fly-catch { animation: fly-catch 0.8s cubic-bezier(0.25,1,0.5,1) forwards; transform-origin: center; }
-    
-    .anim-fade-in { animation: fade-in 0.5s ease-out forwards; }
-    .anim-fade-in-up { animation: fade-in-up 0.5s ease-out forwards; }
-    .anim-slide-in-right { animation: slide-in-right 0.2s ease-out forwards; }
-
-    .smooth-transform { transition: transform 0.4s ease-in-out; }
-    .fast-transform { transition: transform 0.1s ease-out; }
-    .line-transform { transition: all 0.4s ease-in-out; }
-    
-    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #475569; border-radius: 10px; }
-  `;
-
-  if (appState === 'ENDING') {
-      return (
-        <>
-          <style dangerouslySetInnerHTML={{ __html: globalStyles }} />
-          <EndingScreen totalEarned={totalEarned} />
-        </>
-      );
-  }
-
-  const { night: nightOpacity, sunset: sunsetOpacity, dim: dimOpacity } = getSkyOpacities(gameTime);
-  const isCloudy = weather === 'cloudy' || weather === 'rainy';
-
-  return (
-    <div className="flex flex-col h-screen bg-gray-900 font-sans overflow-hidden select-none relative">
-      <style dangerouslySetInnerHTML={{ __html: globalStyles }} />
-
-      {/* --- 解鎖遮罩 --- */}
-      {appState === 'UNLOCK' && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-sky-900 cursor-pointer" onClick={handleUnlock}>
-          <div className="text-center animate-pulse text-white">
-            <div className="text-6xl mb-4 filter drop-shadow-md">⚓</div>
-            <h2 className="text-2xl font-bold tracking-widest">點擊畫面進入碼頭</h2>
-          </div>
-        </div>
-      )}
-
-      {/* 狀態列 (時間與天氣) */}
-      {appState === 'PLAYING' && (
-        <div className="absolute top-3 left-3 flex gap-2 z-30 anim-fade-in pointer-events-none">
-          <div className="bg-slate-900/80 text-white px-3 py-1.5 rounded-full text-xs md:text-sm font-mono border border-slate-700 shadow-lg tracking-widest">
-            🕒 {formatTime(gameTime)}
-          </div>
-          <div className="bg-slate-900/80 text-white px-3 py-1.5 rounded-full text-xs md:text-sm font-bold border border-slate-700 shadow-lg">
-            {weather === 'sunny' ? '☀️ 晴天' : weather === 'cloudy' ? '☁️ 陰天' : '🌧️ 雨天'}
-          </div>
-        </div>
-      )}
-
-      {/* --- 上半部：美麗海景背景 (支援日夜變化與天氣) --- */}
-      <div className="relative flex-none h-[50vh] md:h-[60vh] bg-sky-200 overflow-hidden border-b-4 border-amber-900 shadow-lg z-10">
+      const handleMiniGameWin = useCallback(() => {
+        setGameState('PULLING_UP');
+        SoundEngine.playHit(); 
         
-        {/* 天氣與日夜覆蓋層 */}
-        <div className="absolute inset-0 pointer-events-none z-10 mix-blend-multiply transition-colors duration-1000" style={{ backgroundColor: `rgba(20, 20, 80, ${nightOpacity})` }} />
-        <div className="absolute inset-0 pointer-events-none z-10 mix-blend-color-burn transition-colors duration-1000" style={{ backgroundColor: `rgba(255, 100, 0, ${sunsetOpacity})` }} />
-        <div className="absolute inset-0 pointer-events-none z-10 mix-blend-multiply transition-opacity duration-1000 bg-gray-500" style={{ opacity: dimOpacity }} />
+        setTimeout(() => {
+            setCaughtFish(hookedFish);
+            setGameState('CAUGHT');
+            setInventory(prev => [hookedFish, ...prev]);
+            setTotalEarned(prev => prev + hookedFish.price);
+            SoundEngine.playVictory();
+        }, 800); 
+      }, [hookedFish]);
 
-        {/* 雨天特效 (置於底層) */}
-        {weather === 'rainy' && (
-           <svg className="absolute inset-0 w-full h-full pointer-events-none z-0 opacity-60">
-             {Array.from({ length: 20 }).map((_, i) => (
-               <line key={i} x1={Math.random() * 1000} y1="-50" x2={Math.random() * 1000 - 50} y2="600" stroke="rgba(255,255,255,0.6)" strokeWidth={Math.random() * 1.5 + 0.5} className="anim-rain-fall" style={{ animationDelay: `${Math.random() * 2}s`, animationDuration: `${0.6 + Math.random()*0.3}s` }} />
-             ))}
-           </svg>
-        )}
+      const handleMiniGameLose = useCallback(() => { 
+          setGameState('ESCAPED'); 
+          SoundEngine.playFail(); 
+      }, []);
+      
+      const resetGame = () => { setGameState('IDLE'); setCaughtFish(null); setHookedFish(null); };
 
-        <svg viewBox="0 0 800 500" preserveAspectRatio="xMidYMax slice" className="w-full h-full relative z-10">
-          <defs>
-            <linearGradient id="oceanGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#0ea5e9" />
-              <stop offset="100%" stopColor="#1e3a8a" />
-            </linearGradient>
-            <path id="wavePath" d="M 0 0 Q 50 -10 100 0 T 200 0 T 300 0 T 400 0 T 500 0 T 600 0 T 700 0 T 800 0 T 900 0 T 1000 0 T 1100 0 T 1200 0" fill="none" />
-          </defs>
+      const timeProgress = gameMode === 'timed' && totalTimeMs > 0 ? 1 - (timeLeft / totalTimeMs) : 0;
+      const duskOpacity = timeProgress > 0.8 ? (timeProgress - 0.8) * 5 : 0; 
+      const isSunnyDay = weather === 'sunny' && (gameTime > 300 && gameTime < 1140);
+      const isNight = gameTime < 360 || gameTime > 1080;
 
-          {/* 天空與雲朵 */}
-          <rect width="1000" height="400" fill={isSunnyDay ? "#e0f2fe" : "#bae6fd"} className="transition-colors duration-1000" />
-          
-          {/* 日夜星空切換 */}
-          {isSunnyDay && <circle cx="150" cy="150" r="90" fill="#ffffff" opacity="0.3" />}
-          <circle cx="150" cy="150" r="60" fill={isNight ? "#fdf8ff" : (isSunnyDay ? "#ffffff" : "#fef08a")} opacity={isCloudy ? 0.2 : 1} className="transition-colors duration-1000" />
-          
-          <g opacity={1}>
-            <path d="M 0 380 L 150 340 L 300 365 L 450 335 L 600 370 L 750 325 L 900 360 L 1000 345 L 1000 380 Z" fill="#7dd3fc" opacity="0.8" />
-            <path d="M 0 380 L 80 360 L 200 345 L 350 370 L 500 350 L 680 370 L 850 340 L 1000 365 L 1000 380 Z" fill="#38bdf8" opacity="0.6" />
-          </g>
+      // 全域動畫與樣式設定
+      const globalStyles = `
+        @keyframes fade-in { 0% { opacity: 0; } 100% { opacity: 1; } }
+        @keyframes fade-in-up { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } }
+        @keyframes slide-in-right { 0% { opacity: 0; transform: translateX(30px); } 100% { opacity: 1; transform: translateX(0); } }
+        
+        /* 畫面正中央出水拋物線動畫 */
+        @keyframes fly-catch {
+          0% { transform: translate(400px, 380px) scale(0.2) rotate(0deg); }
+          50% { transform: translate(360px, 80px) scale(0.8) rotate(180deg); }
+          100% { transform: translate(320px, 180px) scale(1.5) rotate(360deg); }
+        }
+        
+        /* 結局走路: 從底部走到一半 (Y=500 -> Y=430) 不縮小 */
+        @keyframes walk-away { 
+          0% { transform: translate(400px, 500px); } 
+          100% { transform: translate(400px, 430px); } 
+        }
 
-          <g style={{ animation: 'cloud-drift 50s linear infinite' }}><path d="M 50 120 Q 80 90 110 120 Q 140 100 170 120 Q 200 140 170 160 L 50 160 Z" fill="#ffffff" opacity={0.9} /></g>
-          <g style={{ animation: 'cloud-drift 70s linear infinite 10s' }}><path d="M -50 150 Q -30 130 -10 150 Q 10 140 30 150 L -50 150 Z" fill="#ffffff" opacity={0.7} /></g>
+        /* 道路透視捲動效果 - 純 CSS 3D 感，0.7秒循環5次剛好3.5秒停住 */
+        @keyframes road-scroll-line {
+          0% { transform: translateY(0px) scaleX(1); stroke-width: 1px; opacity: 0; }
+          10% { opacity: 0.6; }
+          90% { opacity: 0.6; }
+          100% { transform: translateY(120px) scaleX(5); stroke-width: 6px; opacity: 0; }
+        }
+        
+        @keyframes bob { 0% { transform: translateY(0); } 100% { transform: translateY(-4px); } }
+        @keyframes leg-walk { 0% { transform: rotate(-25deg); } 100% { transform: rotate(25deg); } }
+        @keyframes leg-walk-reverse { 0% { transform: rotate(25deg); } 100% { transform: rotate(-25deg); } }
 
-          {/* 海洋 */}
-          <rect y="380" width="1000" height="220" fill="url(#oceanGrad)" />
-          <g transform="translate(0, 390)" opacity="0.6"><use href="#wavePath" style={{ animation: 'wave-move-1 6s linear infinite' }} stroke="#7dd3fc" strokeWidth="2" /></g>
-          <g transform="translate(0, 420)" opacity="0.4"><use href="#wavePath" style={{ animation: 'wave-move-2 8s linear infinite' }} stroke="#bae6fd" strokeWidth="3" /></g>
+        @keyframes float-note {
+          0% { transform: translateY(0px) translateX(0px); opacity: 0; }
+          20% { opacity: 1; }
+          80% { opacity: 1; }
+          100% { transform: translateY(-40px) translateX(15px); opacity: 0; }
+        }
 
-          {/* 碼頭結構 */}
-          <g id="pier">
-            <rect x="50" y="360" width="20" height="140" fill="#451a03" />
-            <rect x="150" y="360" width="20" height="140" fill="#451a03" />
-            <rect x="250" y="360" width="20" height="140" fill="#451a03" />
-            <rect x="-20" y="340" width="340" height="30" fill="#78350f" rx="4" />
-            <rect x="-20" y="340" width="340" height="8" fill="#92400e" rx="2" />
-          </g>
+        /* 結尾文字淡出結束序列 */
+        @keyframes text-fade-sequence {
+          0% { opacity: 0; transform: scale(0.95); }
+          15% { opacity: 1; transform: scale(1); }
+          85% { opacity: 1; transform: scale(1); }
+          100% { opacity: 0; transform: scale(1.05); }
+        }
 
-          {/* 夜間營火燈光 */}
-          {isNight && (
-             <g transform="translate(60, 315)">
-                <circle cx="10" cy="10" r="45" fill="#fef08a" opacity="0.15" className="anim-campfire" />
-                <circle cx="10" cy="10" r="25" fill="#facc15" opacity="0.3" className="anim-campfire" />
-                <rect x="5" y="5" width="10" height="15" fill="#fef08a" rx="2" />
-                <rect x="3" y="20" width="14" height="4" fill="#333" />
-                <path d="M 10 5 L 5 0 L 15 0 Z" fill="#222" />
-             </g>
-          )}
+        @keyframes cloud-drift { 0% { transform: translateX(-150px); } 100% { transform: translateX(900px); } }
+        @keyframes wave-move-1 { 0% { transform: translateX(0); } 100% { transform: translateX(-200px); } }
+        @keyframes wave-move-2 { 0% { transform: translateX(-100px); } 100% { transform: translateX(100px); } }
 
-          {/* 漁夫板凳 */}
-          <g id="chair" transform="translate(100, 200)">
-            <rect x="35" y="110" width="55" height="40" fill="#78350f" rx="4" />
-            <rect x="35" y="110" width="55" height="8" fill="#92400e" rx="2" />
-            <rect x="40" y="118" width="8" height="32" fill="#451a03" />
-            <rect x="77" y="118" width="8" height="32" fill="#451a03" />
-          </g>
+        @keyframes rain-fall {
+          0% { transform: translateY(-50px) translateX(10px); opacity: 0; }
+          20% { opacity: 1; }
+          80% { opacity: 1; }
+          100% { transform: translateY(600px) translateX(-40px); opacity: 0; }
+        }
 
-          {/* 漁夫身體 */}
-          {posture === 'sitting' ? (
-            <g id="fisherman-sitting" transform="translate(100, 200)">
-              <rect x="75" y="130" width="24" height="60" fill="#1e3a8a" rx="10" />
-              <path d="M 70 185 L 100 185 L 105 200 L 80 200 Z" fill="#374151" />
-              <rect x="40" y="110" width="60" height="30" fill="#1e3a8a" rx="10" />
-              <rect x="35" y="50" width="55" height="70" fill="#1e3a8a" rx="15" />
-              <rect x="40" y="50" width="40" height="40" fill="#fcd34d" rx="8" />
-              <circle cx="80" cy="35" r="22" fill="#fca5a5" />
-              <ellipse cx="80" cy="20" rx="45" ry="12" fill="#fef08a" />
-              <path d="M 50 18 Q 80 -15 110 18 Z" fill="#fef08a" />
-              <path d="M 55 15 Q 80 5 105 15" stroke="#ea580c" strokeWidth="4" fill="none" />
-            </g>
-          ) : (
-            <g id="fisherman-standing" transform="translate(100, 160)">
-              <rect x="45" y="110" width="14" height="70" fill="#1e3a8a" rx="5" />
-              <rect x="65" y="110" width="14" height="70" fill="#1e3a8a" rx="5" />
-              <path d="M 40 170 L 60 170 L 65 185 L 40 185 Z" fill="#374151" />
-              <path d="M 60 170 L 80 170 L 85 185 L 60 185 Z" fill="#374151" />
-              <rect x="40" y="50" width="45" height="70" fill="#1e3a8a" rx="15" />
-              <rect x="40" y="50" width="40" height="40" fill="#fcd34d" rx="8" />
-              <rect x="35" y="55" width="14" height="45" fill="#fcd34d" rx="7" transform="rotate(10 35 55)" />
-              <circle cx="80" cy="35" r="22" fill="#fca5a5" />
-              <ellipse cx="80" cy="20" rx="45" ry="12" fill="#fef08a" />
-              <path d="M 50 18 Q 80 -15 110 18 Z" fill="#fef08a" />
-              <path d="M 55 15 Q 80 5 105 15" stroke="#ea580c" strokeWidth="4" fill="none" />
-            </g>
-          )}
+        @keyframes campfire-flicker {
+          0% { opacity: 0.8; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.05); }
+          100% { opacity: 0.9; transform: scale(0.95); }
+        }
 
-          {/* 動態釣竿與手臂 */}
-          {posture === 'sitting' && (
-            <g id="rod-and-arm" transform={`translate(160, 250) rotate(${rodAngle})`} className={gameState === 'HIT' || gameState === 'PULLING_UP' ? 'fast-transform' : 'smooth-transform'}>
-              <line x1="-15" y1="20" x2="40" y2="20" stroke="#291002" strokeWidth="10" strokeLinecap="round" />
-              <line x1="40" y1="20" x2="290" y2="20" stroke="#5c2404" strokeWidth="5" strokeLinecap="round" />
-              <circle cx="10" cy="30" r="10" fill="#9ca3af" />
-              <rect x="5" y="30" width="10" height="15" fill="#4b5563" rx="2" />
-              <rect x="-8" y="0" width="16" height="25" fill="#fcd34d" rx="8" transform="rotate(30)" />
-              <rect x="-1" y="10" width="14" height="20" fill="#fcd34d" rx="7" transform="rotate(-15)" />
-              <circle cx="6" cy="18" r="9" fill="#fca5a5" />
-              <rect x="2" y="12" width="6" height="14" fill="#ef4444" rx="3" opacity="0.4" />
-              <rect x="8" y="14" width="4" height="10" fill="#ef4444" rx="2" opacity="0.4" />
-            </g>
-          )}
+        /* 綁定類別：精準控制所有動畫在 3.5 秒時停止 */
+        .anim-road-line-1 { animation: road-scroll-line 0.7s linear 5 forwards; transform-origin: 400px 380px; }
+        .anim-road-line-2 { animation: road-scroll-line 0.7s linear 5 forwards; transform-origin: 400px 380px; animation-delay: -0.23s; }
+        .anim-road-line-3 { animation: road-scroll-line 0.7s linear 5 forwards; transform-origin: 400px 380px; animation-delay: -0.46s; }
 
-          {/* 釣線與浮標 */}
-          {posture === 'sitting' && showLine && (
-            <g id="line-and-bobber">
-              <path d={gameState === 'HIT' ? `M ${tipX} ${tipY} L ${bobberX} ${bobberY}` : `M ${tipX} ${tipY} Q ${tipX} ${bobberY - 30} ${bobberX} ${bobberY}`} stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" fill="none" className="line-transform" />
-              <g transform={`translate(${bobberX}, ${bobberY})`} className={gameState === 'WAITING' ? 'anim-float' : gameState === 'NIBBLING' ? 'anim-nibble' : ''}>
-                {gameState === 'BITING' && <circle cx="0" cy="0" r="20" stroke="#ffffff" strokeWidth="2" fill="none" opacity="0.6" className="animate-ping" />}
-                <path d="M -6 -10 L 6 -10 L 8 5 L -8 5 Z" fill="#ef4444" />
-                <path d="M -8 5 L 8 5 L 4 15 L -4 15 Z" fill={isNight ? "#facc15" : "#ffffff"} />
-                <circle cx="0" cy="-10" r="2" fill="#ef4444" />
-              </g>
-            </g>
-          )}
+        .anim-walk-away { animation: walk-away 3.5s linear forwards; transform-origin: center; }
+        .anim-bob { animation: bob 0.35s alternate 10 forwards; }
+        .anim-leg-walk { animation: leg-walk 0.35s alternate 10 forwards; }
+        .anim-leg-walk-reverse { animation: leg-walk-reverse 0.35s alternate 10 forwards; }
+        
+        .anim-float-note-1 { animation: float-note 1.5s infinite; }
+        .anim-float-note-2 { animation: float-note 1.5s infinite 0.75s; }
+        .anim-text-fade { animation: text-fade-sequence 6s ease-in-out 8s forwards; }
+        .anim-rain-fall { animation: rain-fall infinite linear; }
+        .anim-campfire { animation: campfire-flicker 0.3s infinite alternate ease-in-out; }
 
-          {/* 畫面正中央出水拋物線動畫 */}
-          {posture === 'sitting' && gameState === 'PULLING_UP' && hookedFish && (
-             <text className="anim-fly-catch" fontSize="50" filter="drop-shadow(2px 4px 6px rgba(0,0,0,0.5))">
-               {hookedFish.icon}
-             </text>
-          )}
+        .anim-fly-catch { animation: fly-catch 0.8s cubic-bezier(0.25,1,0.5,1) forwards; transform-origin: center; }
+        
+        .anim-fade-in { animation: fade-in 0.5s ease-out forwards; }
+        .anim-fade-in-up { animation: fade-in-up 0.5s ease-out forwards; }
+        .anim-slide-in-right { animation: slide-in-right 0.2s ease-out forwards; }
 
-          {posture === 'sitting' && gameState === 'BITING' && <text x="210" y="150" fontSize="50" fill="#ef4444" fontWeight="bold" className="animate-bounce" filter="drop-shadow(2px 2px 0px white)">!</text>}
-          {posture === 'sitting' && gameState === 'HIT' && <text x="400" y="250" fontSize="80" textAnchor="middle" fill="#facc15" fontWeight="900" style={{ animation: 'hit-text 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards' }} stroke="#b45309" strokeWidth="3">HIT!</text>}
-          
-          {/* 定格的漁獲 */}
-          {posture === 'sitting' && gameState === 'CAUGHT' && caughtFish && (
-            <g transform="translate(320, 180)">
-              <text x="0" y="0" fontSize="70" textAnchor="middle" filter="drop-shadow(2px 4px 6px rgba(0,0,0,0.4))">{caughtFish.icon}</text>
-              <text x="0" y="-55" fontSize="24" textAnchor="middle" fill="white" fontWeight="bold" filter="drop-shadow(1px 1px 2px black)">{caughtFish.name}</text>
-            </g>
-          )}
-          {posture === 'sitting' && gameState === 'ESCAPED' && <text x="200" y="170" fontSize="40">💦</text>}
-        </svg>
+        .smooth-transform { transition: transform 0.4s ease-in-out; }
+        .fast-transform { transition: transform 0.1s ease-out; }
+        .line-transform { transition: all 0.4s ease-in-out; }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #475569; border-radius: 10px; }
+      `;
 
-        {/* 獲取視窗 */}
-        {appState === 'PLAYING' && gameState === 'CAUGHT' && caughtFish && (
-          <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-40">
-            <div className="bg-slate-800 border-2 border-slate-500 p-6 rounded-2xl flex flex-col items-center max-w-sm w-full shadow-2xl anim-fade-in-up">
-              <span className="text-xs font-bold bg-gray-700 px-3 py-1 rounded-full text-gray-300 mb-2">上鉤啦！</span>
-              <div className="text-6xl mb-2 drop-shadow-lg">{caughtFish.icon}</div>
-              <h2 className={`text-3xl font-extrabold mb-4 ${caughtFish.color} drop-shadow-md`}>{caughtFish.name}</h2>
-              <div className="w-full bg-slate-900 rounded-lg p-3 mb-4 space-y-2 border border-slate-700 text-sm">
-                <div className="flex justify-between"><span className="text-gray-400">稀有度</span><span className={`font-bold ${caughtFish.color}`}>{caughtFish.rarity.toUpperCase()}</span></div>
-                <div className="flex justify-between"><span className="text-gray-400">長度</span><span className="text-white font-bold">{caughtFish.length} <span className="text-xs text-gray-500">cm</span></span></div>
-                <div className="flex justify-between"><span className="text-gray-400">市場價值</span><span className="text-yellow-400 font-bold">${caughtFish.price}</span></div>
+      if (appState === 'ENDING') {
+          return (
+            <React.Fragment>
+              <style dangerouslySetInnerHTML={{ __html: globalStyles }} />
+              <EndingScreen totalEarned={totalEarned} />
+            </React.Fragment>
+          );
+      }
+
+      const { night: nightOpacity, sunset: sunsetOpacity, dim: dimOpacity } = getSkyOpacities(gameTime);
+      const isCloudy = weather === 'cloudy' || weather === 'rainy';
+
+      return (
+        <div className="flex flex-col h-screen bg-gray-900 font-sans overflow-hidden select-none relative">
+          <style dangerouslySetInnerHTML={{ __html: globalStyles }} />
+
+          {/* --- 解鎖遮罩 --- */}
+          {appState === 'UNLOCK' && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-sky-900 cursor-pointer" onClick={handleUnlock}>
+              <div className="text-center animate-pulse text-white">
+                <div className="text-6xl mb-4 filter drop-shadow-md">⚓</div>
+                <h2 className="text-2xl font-bold tracking-widest">點擊畫面進入碼頭</h2>
               </div>
-              <button onClick={resetGame} className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl shadow-[0_4px_0_rgb(21,128,61)] active:translate-y-1 transition-all text-lg">繼續釣魚</button>
             </div>
-          </div>
-        )}
-      </div>
+          )}
 
-      {/* --- 全螢幕選單疊層 --- */}
-      {appState === 'START' && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/10 backdrop-blur-sm anim-fade-in">
-          <div className="bg-slate-900/90 border-4 border-slate-700 p-8 rounded-3xl flex flex-col items-center max-w-md w-full shadow-2xl">
-            <div className="flex items-center justify-center gap-2 md:gap-4 mb-4">
-              <span className="text-3xl filter drop-shadow-md">🌊</span>
-              <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white via-sky-200 to-blue-500 drop-shadow-[0_4px_8px_rgba(0,100,200,0.8)] text-center leading-tight tracking-[0.1em] font-serif border-b-4 border-dashed border-sky-400 pb-4">海風釣魚</h1>
-              <span className="text-3xl filter drop-shadow-md">🌊</span>
+          {/* 狀態列 (時間與天氣) */}
+          {appState === 'PLAYING' && (
+            <div className="absolute top-3 left-3 flex gap-2 z-30 anim-fade-in pointer-events-none">
+              <div className="bg-slate-900/80 text-white px-3 py-1.5 rounded-full text-xs md:text-sm font-mono border border-slate-700 shadow-lg tracking-widest">
+                🕒 {formatTime(gameTime)}
+              </div>
+              <div className="bg-slate-900/80 text-white px-3 py-1.5 rounded-full text-xs md:text-sm font-bold border border-slate-700 shadow-lg">
+                {weather === 'sunny' ? '☀️ 晴天' : weather === 'cloudy' ? '☁️ 陰天' : '🌧️ 雨天'}
+              </div>
             </div>
-            <p className="text-gray-300 text-center text-sm md:text-base mb-6">伴隨著和煦海風，拋下煩惱。<br/>等待浮標下沉的瞬間，享受釣魚的樂趣。</p>
+          )}
 
-            <div className="w-full bg-slate-800 rounded-2xl p-4 mb-6 border border-slate-600">
-              <h3 className="text-white font-bold mb-2 text-center text-sm">遊戲難度</h3>
-              <div className="flex gap-2 mb-4">
-                <button onClick={() => setStartDiff('simple')} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${startDiff === 'simple' ? 'bg-green-600 text-white shadow-inner' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'}`}>🟢 簡單 (輕鬆體驗)</button>
-                <button onClick={() => setStartDiff('classic')} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${startDiff === 'classic' ? 'bg-red-600 text-white shadow-inner' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'}`}>🔴 經典 (原汁原味)</button>
-              </div>
+          {/* --- 上半部：美麗海景背景 (支援日夜變化與天氣) --- */}
+          <div className="relative flex-none h-[50vh] md:h-[60vh] bg-sky-200 overflow-hidden border-b-4 border-amber-900 shadow-lg z-10">
+            
+            {/* 天氣與日夜覆蓋層 */}
+            <div className="absolute inset-0 pointer-events-none z-10 mix-blend-multiply transition-colors duration-1000" style={{ backgroundColor: `rgba(20, 20, 80, ${nightOpacity})` }} />
+            <div className="absolute inset-0 pointer-events-none z-10 mix-blend-color-burn transition-colors duration-1000" style={{ backgroundColor: `rgba(255, 100, 0, ${sunsetOpacity})` }} />
+            <div className="absolute inset-0 pointer-events-none z-10 mix-blend-multiply transition-opacity duration-1000 bg-gray-500" style={{ opacity: dimOpacity }} />
 
-              <h3 className="text-white font-bold mb-2 text-center text-sm">遊戲模式</h3>
-              <div className="flex gap-2 mb-2">
-                <button onClick={() => setStartMode('endless')} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${startMode === 'endless' ? 'bg-blue-600 text-white shadow-inner' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'}`}>♾️ 無限悠閒</button>
-                <button onClick={() => setStartMode('timed')} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${startMode === 'timed' ? 'bg-amber-600 text-white shadow-inner' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'}`}>⏱️ 計時挑戰</button>
-              </div>
+            {/* 雨天特效 (置於底層) */}
+            {weather === 'rainy' && (
+               <svg className="absolute inset-0 w-full h-full pointer-events-none z-0 opacity-60">
+                 {Array.from({ length: 20 }).map((_, i) => (
+                   <line key={i} x1={Math.random() * 1000} y1="-50" x2={Math.random() * 1000 - 50} y2="600" stroke="rgba(255,255,255,0.6)" strokeWidth={Math.random() * 1.5 + 0.5} className="anim-rain-fall" style={{ animationDelay: `${Math.random() * 2}s`, animationDuration: `${0.6 + Math.random()*0.3}s` }} />
+                 ))}
+               </svg>
+            )}
+
+            <svg viewBox="0 0 800 500" preserveAspectRatio="xMidYMax slice" className="w-full h-full relative z-10">
+              <defs>
+                <linearGradient id="oceanGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#0ea5e9" />
+                  <stop offset="100%" stopColor="#1e3a8a" />
+                </linearGradient>
+                <path id="wavePath" d="M 0 0 Q 50 -10 100 0 T 200 0 T 300 0 T 400 0 T 500 0 T 600 0 T 700 0 T 800 0 T 900 0 T 1000 0 T 1100 0 T 1200 0" fill="none" />
+              </defs>
+
+              {/* 天空與雲朵 */}
+              <rect width="1000" height="400" fill={isSunnyDay ? "#e0f2fe" : "#bae6fd"} className="transition-colors duration-1000" />
               
-              {startMode === 'timed' ? (
-                <div className="flex flex-col items-center bg-slate-900 p-3 rounded-xl border border-slate-700 anim-fade-in">
-                  <span className="text-gray-300 mb-1 text-sm">設定時間：<span className="text-amber-400 font-bold text-lg">{startMinutes}</span> 分鐘</span>
-                  <input type="range" min="1" max="10" value={startMinutes} onChange={(e) => setStartMinutes(Number(e.target.value))} className="w-full accent-amber-500 cursor-pointer h-2 bg-slate-700 rounded-lg appearance-none" />
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center p-3 h-[68px]"><span className="text-gray-400 text-xs text-center">沒有時間壓力，想釣多久就釣多久。</span></div>
+              {/* 日夜星空切換 */}
+              {isSunnyDay && <circle cx="150" cy="150" r="90" fill="#ffffff" opacity="0.3" />}
+              <circle cx="150" cy="150" r="60" fill={isNight ? "#fdf8ff" : (isSunnyDay ? "#ffffff" : "#fef08a")} opacity={isCloudy ? 0.2 : 1} className="transition-colors duration-1000" />
+              
+              <g opacity={1}>
+                <path d="M 0 380 L 150 340 L 300 365 L 450 335 L 600 370 L 750 325 L 900 360 L 1000 345 L 1000 380 Z" fill="#7dd3fc" opacity="0.8" />
+                <path d="M 0 380 L 80 360 L 200 345 L 350 370 L 500 350 L 680 370 L 850 340 L 1000 365 L 1000 380 Z" fill="#38bdf8" opacity="0.6" />
+              </g>
+
+              <g style={{ animation: 'cloud-drift 50s linear infinite' }}><path d="M 50 120 Q 80 90 110 120 Q 140 100 170 120 Q 200 140 170 160 L 50 160 Z" fill="#ffffff" opacity={0.9} /></g>
+              <g style={{ animation: 'cloud-drift 70s linear infinite 10s' }}><path d="M -50 150 Q -30 130 -10 150 Q 10 140 30 150 L -50 150 Z" fill="#ffffff" opacity={0.7} /></g>
+
+              {/* 海洋 */}
+              <rect y="380" width="1000" height="220" fill="url(#oceanGrad)" />
+              <g transform="translate(0, 390)" opacity="0.6"><use href="#wavePath" style={{ animation: 'wave-move-1 6s linear infinite' }} stroke="#7dd3fc" strokeWidth="2" /></g>
+              <g transform="translate(0, 420)" opacity="0.4"><use href="#wavePath" style={{ animation: 'wave-move-2 8s linear infinite' }} stroke="#bae6fd" strokeWidth="3" /></g>
+
+              {/* 碼頭結構 */}
+              <g id="pier">
+                <rect x="50" y="360" width="20" height="140" fill="#451a03" />
+                <rect x="150" y="360" width="20" height="140" fill="#451a03" />
+                <rect x="250" y="360" width="20" height="140" fill="#451a03" />
+                <rect x="-20" y="340" width="340" height="30" fill="#78350f" rx="4" />
+                <rect x="-20" y="340" width="340" height="8" fill="#92400e" rx="2" />
+              </g>
+
+              {/* 夜間營火燈光 */}
+              {isNight && (
+                 <g transform="translate(60, 315)">
+                    <circle cx="10" cy="10" r="45" fill="#fef08a" opacity="0.15" className="anim-campfire" />
+                    <circle cx="10" cy="10" r="25" fill="#facc15" opacity="0.3" className="anim-campfire" />
+                    <rect x="5" y="5" width="10" height="15" fill="#fef08a" rx="2" />
+                    <rect x="3" y="20" width="14" height="4" fill="#333" />
+                    <path d="M 10 5 L 5 0 L 15 0 Z" fill="#222" />
+                 </g>
               )}
-            </div>
-            <button onClick={() => handleStartGame(startMode, startDiff, startMode === 'timed' ? startMinutes * 60 : null)} className="w-full py-4 bg-green-600 hover:bg-green-500 text-white font-black text-xl rounded-2xl shadow-[0_6px_0_rgb(21,128,61)] active:shadow-[0_0px_0_rgb(21,128,61)] active:translate-y-1 transition-all">
-              坐下開始釣魚
-            </button>
-          </div>
-        </div>
-      )}
 
-      {appState === 'SUMMARY' && <SummaryPanel inventory={inventory} totalEarned={totalEarned} onRestart={handleRestart} onGoHome={handleGoHome} />}
-      {appState === 'PLAYING' && gameState === 'MINIGAME' && hookedFish && <FishingMiniGame fish={hookedFish} difficultySettings={gameDifficulty} weather={weather} onWin={handleMiniGameWin} onLose={handleMiniGameLose} />}
+              {/* 漁夫板凳 */}
+              <g id="chair" transform="translate(100, 200)">
+                <rect x="35" y="110" width="55" height="40" fill="#78350f" rx="4" />
+                <rect x="35" y="110" width="55" height="8" fill="#92400e" rx="2" />
+                <rect x="40" y="118" width="8" height="32" fill="#451a03" />
+                <rect x="77" y="118" width="8" height="32" fill="#451a03" />
+              </g>
 
-      {/* --- 下半部：操作 UI 介面 --- */}
-      <div className={`flex-1 bg-gray-800 p-3 md:p-4 flex flex-col md:flex-row gap-3 md:gap-4 overflow-hidden relative transition-opacity duration-300 ${appState !== 'PLAYING' ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
-        <div className="flex-none flex flex-col justify-between items-center md:w-1/3 bg-gray-900 rounded-xl p-3 md:p-4 border border-gray-700 h-auto">
-          <div className="w-full">
-            {gameMode === 'timed' ? (
-              <div className="w-full mb-3 bg-slate-800 rounded-full h-4 border border-slate-600 overflow-hidden relative shadow-inner">
-                <div className="h-full bg-amber-500 transition-all duration-1000 ease-linear" style={{ width: `${(timeLeft / totalTimeMs) * 100}%` }} />
-                <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md">剩餘時間 {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}</span>
-              </div>
-            ) : (
-              <div className="w-full mb-3 py-1 bg-slate-800 rounded-full border border-slate-600 text-center text-xs text-slate-400 font-bold">♾️ 無限悠閒模式</div>
-            )}
-            <div className="mb-4 h-8 flex items-center justify-center w-full bg-black bg-opacity-40 rounded border border-gray-800">
-              <span className="text-gray-300 font-mono text-xs md:text-sm tracking-widest truncate px-2">
-                {gameState === 'IDLE' && "▶ 準備就緒"}
-                {gameState === 'CASTING' && "▶ 拋出釣線..."}
-                {gameState === 'WAITING' && "▶ 等待魚兒上鉤..."}
-                {gameState === 'NIBBLING' && "▶ 有動靜！"}
-                {gameState === 'BITING' && "▶ 咬餌了！！"}
-                {gameState === 'ESCAPED' && "▶ 真可惜，失敗了..."}
-                {gameState === 'PULLING_UP' && "▶ 上鉤！拉出水面！"}
-                {gameState === 'CAUGHT' && "▶ 成功捕獲！"}
-              </span>
-            </div>
-          </div>
+              {/* 漁夫身體 */}
+              {posture === 'sitting' ? (
+                <g id="fisherman-sitting" transform="translate(100, 200)">
+                  <rect x="75" y="130" width="24" height="60" fill="#1e3a8a" rx="10" />
+                  <path d="M 70 185 L 100 185 L 105 200 L 80 200 Z" fill="#374151" />
+                  <rect x="40" y="110" width="60" height="30" fill="#1e3a8a" rx="10" />
+                  <rect x="35" y="50" width="55" height="70" fill="#1e3a8a" rx="15" />
+                  <rect x="40" y="50" width="40" height="40" fill="#fcd34d" rx="8" />
+                  <circle cx="80" cy="35" r="22" fill="#fca5a5" />
+                  <ellipse cx="80" cy="20" rx="45" ry="12" fill="#fef08a" />
+                  <path d="M 50 18 Q 80 -15 110 18 Z" fill="#fef08a" />
+                  <path d="M 55 15 Q 80 5 105 15" stroke="#ea580c" strokeWidth="4" fill="none" />
+                </g>
+              ) : (
+                <g id="fisherman-standing" transform="translate(100, 160)">
+                  <rect x="45" y="110" width="14" height="70" fill="#1e3a8a" rx="5" />
+                  <rect x="65" y="110" width="14" height="70" fill="#1e3a8a" rx="5" />
+                  <path d="M 40 170 L 60 170 L 65 185 L 40 185 Z" fill="#374151" />
+                  <path d="M 60 170 L 80 170 L 85 185 L 60 185 Z" fill="#374151" />
+                  <rect x="40" y="50" width="45" height="70" fill="#1e3a8a" rx="15" />
+                  <rect x="40" y="50" width="40" height="40" fill="#fcd34d" rx="8" />
+                  <rect x="35" y="55" width="14" height="45" fill="#fcd34d" rx="7" transform="rotate(10 35 55)" />
+                  <circle cx="80" cy="35" r="22" fill="#fca5a5" />
+                  <ellipse cx="80" cy="20" rx="45" ry="12" fill="#fef08a" />
+                  <path d="M 50 18 Q 80 -15 110 18 Z" fill="#fef08a" />
+                  <path d="M 55 15 Q 80 5 105 15" stroke="#ea580c" strokeWidth="4" fill="none" />
+                </g>
+              )}
 
-          <div className="w-full flex flex-col items-center gap-2">
-            {(gameState === 'IDLE' || gameState === 'ESCAPED' || gameState === 'CAUGHT') && (
-              <button onClick={castLine} className="w-full max-w-[240px] py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xl rounded-xl shadow-[0_6px_0_rgb(30,58,138)] active:shadow-[0_0px_0_rgb(30,58,138)] active:translate-y-1 transition-all">拋竿</button>
-            )}
-            {(gameState === 'WAITING' || gameState === 'NIBBLING' || gameState === 'BITING') && (
-              <button onClick={hitHook} className={`w-full max-w-[240px] py-4 font-bold text-xl rounded-xl transition-all ${gameState === 'BITING' ? 'bg-red-500 hover:bg-red-400 text-white shadow-[0_6px_0_rgb(153,27,27)] active:shadow-[0_0px_0_rgb(153,27,27)] active:translate-y-1 scale-105 animate-pulse' : 'bg-gray-700 text-gray-400 shadow-[0_6px_0_rgb(55,65,81)] active:shadow-[0_0px_0_rgb(55,65,81)] active:translate-y-1'}`}>拉竿！</button>
-            )}
-            {(gameState === 'IDLE' || gameState === 'ESCAPED' || gameState === 'CAUGHT') && (
-              <button onClick={handleTriggerSummary} className="mt-2 text-slate-400 hover:text-white text-sm underline underline-offset-4 transition-colors">
-                結算收穫
-              </button>
-            )}
-          </div>
-        </div>
+              {/* 動態釣竿與手臂 */}
+              {posture === 'sitting' && (
+                <g id="rod-and-arm" transform={`translate(160, 250) rotate(${rodAngle})`} className={gameState === 'HIT' || gameState === 'PULLING_UP' ? 'fast-transform' : 'smooth-transform'}>
+                  <line x1="-15" y1="20" x2="40" y2="20" stroke="#291002" strokeWidth="10" strokeLinecap="round" />
+                  <line x1="40" y1="20" x2="290" y2="20" stroke="#5c2404" strokeWidth="5" strokeLinecap="round" />
+                  <circle cx="10" cy="30" r="10" fill="#9ca3af" />
+                  <rect x="5" y="30" width="10" height="15" fill="#4b5563" rx="2" />
+                  <rect x="-8" y="0" width="16" height="25" fill="#fcd34d" rx="8" transform="rotate(30)" />
+                  <rect x="-1" y="10" width="14" height="20" fill="#fcd34d" rx="7" transform="rotate(-15)" />
+                  <circle cx="6" cy="18" r="9" fill="#fca5a5" />
+                  <rect x="2" y="12" width="6" height="14" fill="#ef4444" rx="3" opacity="0.4" />
+                  <rect x="8" y="14" width="4" height="10" fill="#ef4444" rx="2" opacity="0.4" />
+                </g>
+              )}
 
-        <div className="flex-1 flex flex-col bg-gray-900 rounded-xl border border-gray-700 overflow-hidden min-h-0">
-          <div className="bg-gray-800 p-2 md:p-3 flex justify-between items-center border-b border-gray-700 flex-none">
-            <h3 className="text-gray-200 font-bold text-base flex items-center gap-2"><span>🎒</span> 暫存背包 <span className="text-xs font-normal text-gray-500">({inventory.length})</span></h3>
-          </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
-            {inventory.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-gray-600"><span className="text-3xl mb-2 opacity-50">🎣</span><span className="italic text-xs">背包空空如也。</span></div>
-            ) : (
-              inventory.map((fish, idx) => (
-                <div key={`${fish.id}-${idx}`} className="flex justify-between items-center bg-gray-800 p-2 rounded-lg border border-gray-700">
-                  <div className="flex items-center gap-3"><span className="text-2xl filter drop-shadow-md">{fish.icon}</span><span className={`font-bold text-sm ${fish.color}`}>{fish.name}</span></div>
-                  <span className="text-yellow-400 font-bold text-sm">${fish.price}</span>
+              {/* 釣線與浮標 */}
+              {posture === 'sitting' && showLine && (
+                <g id="line-and-bobber">
+                  <path d={gameState === 'HIT' ? `M ${tipX} ${tipY} L ${bobberX} ${bobberY}` : `M ${tipX} ${tipY} Q ${tipX} ${bobberY - 30} ${bobberX} ${bobberY}`} stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" fill="none" className="line-transform" />
+                  <g transform={`translate(${bobberX}, ${bobberY})`} className={gameState === 'WAITING' ? 'anim-float' : gameState === 'NIBBLING' ? 'anim-nibble' : ''}>
+                    {gameState === 'BITING' && <circle cx="0" cy="0" r="20" stroke="#ffffff" strokeWidth="2" fill="none" opacity="0.6" className="animate-ping" />}
+                    <path d="M -6 -10 L 6 -10 L 8 5 L -8 5 Z" fill="#ef4444" />
+                    <path d="M -8 5 L 8 5 L 4 15 L -4 15 Z" fill={isNight ? "#facc15" : "#ffffff"} />
+                    <circle cx="0" cy="-10" r="2" fill="#ef4444" />
+                  </g>
+                </g>
+              )}
+
+              {/* 畫面正中央出水拋物線動畫 */}
+              {posture === 'sitting' && gameState === 'PULLING_UP' && hookedFish && (
+                 <text className="anim-fly-catch" fontSize="50" filter="drop-shadow(2px 4px 6px rgba(0,0,0,0.5))">
+                   {hookedFish.icon}
+                 </text>
+              )}
+
+              {posture === 'sitting' && gameState === 'BITING' && <text x="210" y="150" fontSize="50" fill="#ef4444" fontWeight="bold" className="animate-bounce" filter="drop-shadow(2px 2px 0px white)">!</text>}
+              {posture === 'sitting' && gameState === 'HIT' && <text x="400" y="250" fontSize="80" textAnchor="middle" fill="#facc15" fontWeight="900" style={{ animation: 'hit-text 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards' }} stroke="#b45309" strokeWidth="3">HIT!</text>}
+              
+              {/* 定格的漁獲 */}
+              {posture === 'sitting' && gameState === 'CAUGHT' && caughtFish && (
+                <g transform="translate(320, 180)">
+                  <text x="0" y="0" fontSize="70" textAnchor="middle" filter="drop-shadow(2px 4px 6px rgba(0,0,0,0.4))">{caughtFish.icon}</text>
+                  <text x="0" y="-55" fontSize="24" textAnchor="middle" fill="white" fontWeight="bold" filter="drop-shadow(1px 1px 2px black)">{caughtFish.name}</text>
+                </g>
+              )}
+              {posture === 'sitting' && gameState === 'ESCAPED' && <text x="200" y="170" fontSize="40">💦</text>}
+            </svg>
+
+            {/* 獲取視窗 */}
+            {appState === 'PLAYING' && gameState === 'CAUGHT' && caughtFish && (
+              <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-40">
+                <div className="bg-slate-800 border-2 border-slate-500 p-6 rounded-2xl flex flex-col items-center max-w-sm w-full shadow-2xl anim-fade-in-up">
+                  <span className="text-xs font-bold bg-gray-700 px-3 py-1 rounded-full text-gray-300 mb-2">上鉤啦！</span>
+                  <div className="text-6xl mb-2 drop-shadow-lg">{caughtFish.icon}</div>
+                  <h2 className={`text-3xl font-extrabold mb-4 ${caughtFish.color} drop-shadow-md`}>{caughtFish.name}</h2>
+                  <div className="w-full bg-slate-900 rounded-lg p-3 mb-4 space-y-2 border border-slate-700 text-sm">
+                    <div className="flex justify-between"><span className="text-gray-400">稀有度</span><span className={`font-bold ${caughtFish.color}`}>{caughtFish.rarity.toUpperCase()}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">長度</span><span className="text-white font-bold">{caughtFish.length} <span className="text-xs text-gray-500">cm</span></span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">市場價值</span><span className="text-yellow-400 font-bold">${caughtFish.price}</span></div>
+                  </div>
+                  <button onClick={resetGame} className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl shadow-[0_4px_0_rgb(21,128,61)] active:translate-y-1 transition-all text-lg">繼續釣魚</button>
                 </div>
-              ))
+              </div>
             )}
           </div>
+
+          {/* --- 全螢幕選單疊層 --- */}
+          {appState === 'START' && (
+            <div className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/10 backdrop-blur-sm anim-fade-in">
+              <div className="bg-slate-900/90 border-4 border-slate-700 p-8 rounded-3xl flex flex-col items-center max-w-md w-full shadow-2xl">
+                <div className="flex items-center justify-center gap-2 md:gap-4 mb-4">
+                  <span className="text-3xl filter drop-shadow-md">🌊</span>
+                  <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white via-sky-200 to-blue-500 drop-shadow-[0_4px_8px_rgba(0,100,200,0.8)] text-center leading-tight tracking-[0.1em] font-serif border-b-4 border-dashed border-sky-400 pb-4">海風釣魚</h1>
+                  <span className="text-3xl filter drop-shadow-md">🌊</span>
+                </div>
+                <p className="text-gray-300 text-center text-sm md:text-base mb-6">伴隨著和煦海風，拋下煩惱。<br/>等待浮標下沉的瞬間，享受釣魚的樂趣。</p>
+
+                <div className="w-full bg-slate-800 rounded-2xl p-4 mb-6 border border-slate-600">
+                  <h3 className="text-white font-bold mb-2 text-center text-sm">遊戲難度</h3>
+                  <div className="flex gap-2 mb-4">
+                    <button onClick={() => setStartDiff('simple')} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${startDiff === 'simple' ? 'bg-green-600 text-white shadow-inner' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'}`}>🟢 簡單 (輕鬆體驗)</button>
+                    <button onClick={() => setStartDiff('classic')} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${startDiff === 'classic' ? 'bg-red-600 text-white shadow-inner' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'}`}>🔴 經典 (原汁原味)</button>
+                  </div>
+
+                  <h3 className="text-white font-bold mb-2 text-center text-sm">遊戲模式</h3>
+                  <div className="flex gap-2 mb-2">
+                    <button onClick={() => setStartMode('endless')} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${startMode === 'endless' ? 'bg-blue-600 text-white shadow-inner' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'}`}>♾️ 無限悠閒</button>
+                    <button onClick={() => setStartMode('timed')} className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${startMode === 'timed' ? 'bg-amber-600 text-white shadow-inner' : 'bg-slate-700 text-gray-400 hover:bg-slate-600'}`}>⏱️ 計時挑戰</button>
+                  </div>
+                  
+                  {startMode === 'timed' ? (
+                    <div className="flex flex-col items-center bg-slate-900 p-3 rounded-xl border border-slate-700 anim-fade-in">
+                      <span className="text-gray-300 mb-1 text-sm">設定時間：<span className="text-amber-400 font-bold text-lg">{startMinutes}</span> 分鐘</span>
+                      <input type="range" min="1" max="10" value={startMinutes} onChange={(e) => setStartMinutes(Number(e.target.value))} className="w-full accent-amber-500 cursor-pointer h-2 bg-slate-700 rounded-lg appearance-none" />
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center p-3 h-[68px]"><span className="text-gray-400 text-xs text-center">沒有時間壓力，想釣多久就釣多久。</span></div>
+                  )}
+                </div>
+                <button onClick={() => handleStartGame(startMode, startDiff, startMode === 'timed' ? startMinutes * 60 : null)} className="w-full py-4 bg-green-600 hover:bg-green-500 text-white font-black text-xl rounded-2xl shadow-[0_6px_0_rgb(21,128,61)] active:shadow-[0_0px_0_rgb(21,128,61)] active:translate-y-1 transition-all">
+                  坐下開始釣魚
+                </button>
+              </div>
+            </div>
+          )}
+
+          {appState === 'SUMMARY' && <SummaryPanel inventory={inventory} totalEarned={totalEarned} onRestart={handleRestart} onGoHome={handleGoHome} />}
+          {appState === 'PLAYING' && gameState === 'MINIGAME' && hookedFish && <FishingMiniGame fish={hookedFish} difficultySettings={gameDifficulty} weather={weather} onWin={handleMiniGameWin} onLose={handleMiniGameLose} />}
+
+          {/* --- 下半部：操作 UI 介面 --- */}
+          <div className={`flex-1 bg-gray-800 p-3 md:p-4 flex flex-col md:flex-row gap-3 md:gap-4 overflow-hidden relative transition-opacity duration-300 ${appState !== 'PLAYING' ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
+            <div className="flex-none flex flex-col justify-between items-center md:w-1/3 bg-gray-900 rounded-xl p-3 md:p-4 border border-gray-700 h-auto">
+              <div className="w-full">
+                {gameMode === 'timed' ? (
+                  <div className="w-full mb-3 bg-slate-800 rounded-full h-4 border border-slate-600 overflow-hidden relative shadow-inner">
+                    <div className="h-full bg-amber-500 transition-all duration-1000 ease-linear" style={{ width: `${(timeLeft / totalTimeMs) * 100}%` }} />
+                    <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md">剩餘時間 {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, '0')}</span>
+                  </div>
+                ) : (
+                  <div className="w-full mb-3 py-1 bg-slate-800 rounded-full border border-slate-600 text-center text-xs text-slate-400 font-bold">♾️ 無限悠閒模式</div>
+                )}
+                <div className="mb-4 h-8 flex items-center justify-center w-full bg-black bg-opacity-40 rounded border border-gray-800">
+                  <span className="text-gray-300 font-mono text-xs md:text-sm tracking-widest truncate px-2">
+                    {gameState === 'IDLE' && "▶ 準備就緒"}
+                    {gameState === 'CASTING' && "▶ 拋出釣線..."}
+                    {gameState === 'WAITING' && "▶ 等待魚兒上鉤..."}
+                    {gameState === 'NIBBLING' && "▶ 有動靜！"}
+                    {gameState === 'BITING' && "▶ 咬餌了！！"}
+                    {gameState === 'ESCAPED' && "▶ 真可惜，失敗了..."}
+                    {gameState === 'PULLING_UP' && "▶ 上鉤！拉出水面！"}
+                    {gameState === 'CAUGHT' && "▶ 成功捕獲！"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="w-full flex flex-col items-center gap-2">
+                {(gameState === 'IDLE' || gameState === 'ESCAPED' || gameState === 'CAUGHT') && (
+                  <button onClick={castLine} className="w-full max-w-[240px] py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xl rounded-xl shadow-[0_6px_0_rgb(30,58,138)] active:shadow-[0_0px_0_rgb(30,58,138)] active:translate-y-1 transition-all">拋竿</button>
+                )}
+                {(gameState === 'WAITING' || gameState === 'NIBBLING' || gameState === 'BITING') && (
+                  <button onClick={hitHook} className={`w-full max-w-[240px] py-4 font-bold text-xl rounded-xl transition-all ${gameState === 'BITING' ? 'bg-red-500 hover:bg-red-400 text-white shadow-[0_6px_0_rgb(153,27,27)] active:shadow-[0_0px_0_rgb(153,27,27)] active:translate-y-1 scale-105 animate-pulse' : 'bg-gray-700 text-gray-400 shadow-[0_6px_0_rgb(55,65,81)] active:shadow-[0_0px_0_rgb(55,65,81)] active:translate-y-1'}`}>拉竿！</button>
+                )}
+                {(gameState === 'IDLE' || gameState === 'ESCAPED' || gameState === 'CAUGHT') && (
+                  <button onClick={handleTriggerSummary} className="mt-2 text-slate-400 hover:text-white text-sm underline underline-offset-4 transition-colors">
+                    結算收穫
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex-1 flex flex-col bg-gray-900 rounded-xl border border-gray-700 overflow-hidden min-h-0">
+              <div className="bg-gray-800 p-2 md:p-3 flex justify-between items-center border-b border-gray-700 flex-none">
+                <h3 className="text-gray-200 font-bold text-base flex items-center gap-2"><span>🎒</span> 暫存背包 <span className="text-xs font-normal text-gray-500">({inventory.length})</span></h3>
+              </div>
+              <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+                {inventory.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-gray-600"><span className="text-3xl mb-2 opacity-50">🎣</span><span className="italic text-xs">背包空空如也。</span></div>
+                ) : (
+                  inventory.map((fish, idx) => (
+                    <div key={`${fish.id}-${idx}`} className="flex justify-between items-center bg-gray-800 p-2 rounded-lg border border-gray-700">
+                      <div className="flex items-center gap-3"><span className="text-2xl filter drop-shadow-md">{fish.icon}</span><span className={`font-bold text-sm ${fish.color}`}>{fish.name}</span></div>
+                      <span className="text-yellow-400 font-bold text-sm">${fish.price}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-  );
-}
+      );
+    }
+  </script>
+</body>
+</html>
