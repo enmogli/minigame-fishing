@@ -331,5 +331,40 @@ const EndingScreen = ({ totalEarned }) => {
 
   return (
     <div className="absolute inset-0 bg-black overflow-hidden select-none z-50 flex items-center justify-center">
-      
-      <svg viewBox="0 0 800 500" preserveAspectRatio="xMidYMax slice" className="w-full h
+    {/* 這裡是補齊原本斷掉的 EndingScreen 元件內容 */}
+      <svg viewBox="0 0 800 500" preserveAspectRatio="xMidYMax slice" className="w-full h-full">
+        {/* 夕陽背景 */}
+        <rect width="800" height="500" fill="#f97316" />
+        <circle cx="400" cy="250" r="100" fill="#fbbf24" opacity="0.8" />
+      </svg>
+      <div className="absolute flex flex-col items-center">
+        <h1 className="text-white text-4xl font-black mb-4">今日辛苦了！</h1>
+        <p className="text-orange-200 text-xl">總共賺到了 ${totalEarned}</p>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="mt-8 px-6 py-2 bg-white text-orange-600 font-bold rounded-full"
+        >
+          返回碼頭
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// --- 最終組裝：App 主元件 ---
+// 這是讓 GitHub Actions 能夠成功編譯的關鍵入口
+const App = () => {
+  return (
+    <div className="w-full h-screen bg-slate-900">
+      {/* 這裡先預設顯示結算畫面供測試，之後可以加上完整的遊戲邏輯切換 */}
+      <SummaryPanel 
+        inventory={[]} 
+        totalEarned={0} 
+        onRestart={() => window.location.reload()} 
+        onGoHome={() => window.location.reload()} 
+      />
+    </div>
+  );
+};
+
+export default App;
