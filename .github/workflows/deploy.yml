@@ -19,5 +19,5 @@ jobs:
       - name: Deploy 🚀
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: dist # Vite 編譯後的資料夾
-          branch: gh-pages # 這是 GitHub Pages 運行的分支
+          folder: dist
+          branch: gh-pages
